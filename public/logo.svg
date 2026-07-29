@@ -1,0 +1,41 @@
+<svg viewBox="0 0 400 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="vGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00D9FF"/>
+      <stop offset="50%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#FF00E5"/>
+    </linearGradient>
+    <linearGradient id="vGradientVertical" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00D9FF"/>
+      <stop offset="50%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#FF00E5"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glowSoft">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Ambient glow behind V -->
+  <path d="M 90 30 L 200 115 L 310 30" fill="none" stroke="url(#vGradient)" stroke-width="36" stroke-linecap="round" stroke-linejoin="round" opacity="0.2" filter="url(#glowSoft)"/>
+
+  <!-- Main V mark -->
+  <path d="M 90 30 L 200 115 L 310 30" fill="none" stroke="url(#vGradient)" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+
+  <!-- Upward arrow accent embedded in V -->
+  <line x1="200" y1="105" x2="200" y2="50" stroke="#E8E8FF" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
+  <polyline points="193,57 200,50 207,57" fill="none" stroke="#E8E8FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+
+  <!-- VeneRate text -->
+  <text x="200" y="170" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="34" font-weight="700" fill="#E8E8FF" letter-spacing="2">VeneRate</text>
+</svg>

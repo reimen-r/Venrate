@@ -1,0 +1,6 @@
+{
+  "name": "VeneRate",
+  "description": "Monitor de divisas en tiempo real para el mercado cambiario venezolano, con calculadora rápida de conversión, alertas personalizadas e historial de tendencias.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

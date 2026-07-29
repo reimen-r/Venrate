@@ -1,0 +1,198 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --color-background: #050510;
+  --color-surface-dim: #0a0a1a;
+  --color-surface-bright: #1a1a3a;
+  --color-surface-container-lowest: #030308;
+  --color-surface-container-low: #0d0d22;
+  --color-surface-container: #11112a;
+  --color-surface-container-high: #1a1a3a;
+  --color-surface-container-highest: #22224a;
+  --color-on-surface: #e8e8ff;
+  --color-on-surface-variant: #9999c0;
+  --color-primary: #00d9ff;
+  --color-on-primary: #003344;
+  --color-primary-container: #0099cc;
+  --color-on-primary-container: #001a2a;
+  --color-secondary: #8b5cf6;
+  --color-on-secondary: #1a0044;
+  --color-secondary-container: #6d28d9;
+  --color-on-secondary-container: #0d0022;
+  --color-tertiary: #ff00e5;
+  --color-on-tertiary: #440033;
+  --color-tertiary-container: #cc00bf;
+  --color-on-tertiary-container: #2d001a;
+  --color-success: #00ff88;
+  --color-warning: #ffb800;
+  --color-error: #ff3366;
+  --color-error-container: #660011;
+  --color-on-error: #440011;
+  --color-on-error-container: #ffd6d6;
+  --color-outline: #55557a;
+  --color-outline-variant: #383860;
+  --color-surface-variant: #1a1a3a;
+
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Base style resets */
+@layer base {
+  body {
+    background-color: #050510;
+    color: #e8e8ff;
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Light mode overrides if 'light' class is present on html */
+html.light body {
+  background-color: #f0f4ff;
+  color: #0f172a;
+}
+
+html.light {
+  --color-background: #f0f4ff;
+  --color-surface-dim: #d6e0f5;
+  --color-surface-bright: #ffffff;
+  --color-surface-container-lowest: #f8faff;
+  --color-surface-container-low: #f0f4ff;
+  --color-surface-container: #e0e8f8;
+  --color-surface-container-high: #c0d0f0;
+  --color-surface-container-highest: #a0b8e0;
+  --color-on-surface: #0f172a;
+  --color-on-surface-variant: #475569;
+  --color-primary: #0066ff;
+  --color-on-primary: #ffffff;
+  --color-primary-container: #bfdbff;
+  --color-on-primary-container: #001a44;
+  --color-secondary: #7c3aed;
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #e0d0ff;
+  --color-on-secondary-container: #2d0050;
+  --color-tertiary: #ec4899;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #ffd0e0;
+  --color-on-tertiary-container: #440022;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+  --color-error-container: #ffd0d0;
+  --color-on-error: #ffffff;
+  --color-on-error-container: #440000;
+  --color-outline: #94a3b8;
+  --color-outline-variant: #c0d0f0;
+  --color-surface-variant: #e0e8f8;
+}
+
+/* Neon glass card with mesh gradient */
+.fluid-card {
+  background: linear-gradient(135deg, rgba(0, 217, 255, 0.06) 0%, rgba(139, 92, 246, 0.06) 50%, rgba(255, 0, 229, 0.03) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 217, 255, 0.15);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 40px rgba(0, 217, 255, 0.04);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fluid-card:hover {
+  border-color: rgba(0, 217, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 60px rgba(0, 217, 255, 0.08);
+}
+
+@media (max-width: 768px) {
+  .fluid-card {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+}
+
+html.light .fluid-card {
+  background: linear-gradient(135deg, rgba(0, 102, 255, 0.04) 0%, rgba(124, 58, 237, 0.04) 100%);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.06);
+}
+
+html.light .fluid-card:hover {
+  border-color: rgba(0, 102, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+}
+
+/* Primary neon card with stronger glow */
+.fluid-card-primary {
+  background: linear-gradient(135deg, rgba(0, 217, 255, 0.12) 0%, rgba(139, 92, 246, 0.08) 50%, rgba(255, 0, 229, 0.04) 100%);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(0, 217, 255, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 40px rgba(0, 217, 255, 0.1);
+}
+
+@media (max-width: 768px) {
+  .fluid-card-primary {
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+}
+
+html.light .fluid-card-primary {
+  background: linear-gradient(135deg, rgba(0, 102, 255, 0.08) 0%, rgba(124, 58, 237, 0.05) 100%);
+  border: 1px solid rgba(0, 102, 255, 0.2);
+  box-shadow: 0 8px 32px rgba(0, 102, 255, 0.08);
+}
+
+/* Premium full rounded elements */
+.fluid-input {
+  border-radius: 9999px !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fluid-input:focus {
+  box-shadow: 0 0 0 4px rgba(0, 217, 255, 0.2);
+}
+
+html.light .fluid-input:focus {
+  box-shadow: 0 0 0 4px rgba(0, 102, 255, 0.15);
+}
+
+/* Hide scrollbars for slick navigation tab bar */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom animations */
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 217, 255, 0.15); }
+  50% { box-shadow: 0 0 40px rgba(0, 217, 255, 0.3); }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-up {
+  animation: slide-up 0.4s ease-out;
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
