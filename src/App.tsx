@@ -42,8 +42,18 @@ const LoadingFallback = () => (
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [rates, setRates] = useState<ExchangeRate[]>(INITIAL_RATES);
-  const [alerts, setAlerts] = useState<PriceAlert[]>(INITIAL_ALERTS);
-  const [intelligentAlerts, setIntelligentAlerts] = useState<IntelligentAlerts>({ fluctuations: true, dailySummary: true, bcvParallelGap: false });
+  const [alerts, setAlerts] = useState<PriceAlert[]>(() => {
+    try {
+      const saved = localStorage.getItem('venrate-alerts');
+      return saved ? JSON.parse(saved) : INITIAL_ALERTS;
+    } catch { return INITIAL_ALERTS; }
+  });
+  const [intelligentAlerts, setIntelligentAlerts] = useState<IntelligentAlerts>(() => {
+    try {
+      const saved = localStorage.getItem('venrate-intelligent-alerts');
+      return saved ? JSON.parse(saved) : { fluctuations: true, dailySummary: true, bcvParallelGap: false };
+    } catch { return { fluctuations: true, dailySummary: true, bcvParallelGap: false }; }
+  });
   const [isFetching, setIsFetching] = useState<boolean>(false);
   const [lastFetched, setLastFetched] = useState<Date | null>(null);
   const [isDarkMode, setIsDarkMode] = useState<boolean>(true);
@@ -130,6 +140,9 @@ export default function App() {
     window.addEventListener('offline', handleOffline);
     return () => { window.removeEventListener('online', handleOnline); window.removeEventListener('offline', handleOffline); };
   }, []);
+
+  useEffect(() => { try { localStorage.setItem('venrate-alerts', JSON.stringify(alerts)); } catch {} }, [alerts]);
+  useEffect(() => { try { localStorage.setItem('venrate-intelligent-alerts', JSON.stringify(intelligentAlerts)); } catch {} }, [intelligentAlerts]);
 
   useEffect(() => {
     updateRatesFromApi();

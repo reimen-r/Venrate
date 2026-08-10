@@ -149,7 +149,7 @@ export const AlertsTab = React.memo<AlertsTabProps>(({
               </div>
 
               <motion.button
-                type="submit" disabled={isSubmitting}
+                type="submit" disabled={isSubmitting || submitted}
                 whileHover={!isSubmitting ? { scale: 1.01, filter: 'brightness(1.1)' } : {}}
                 whileTap={!isSubmitting ? { scale: 0.97 } : {}}
                 className={`w-full font-sans font-semibold py-4 rounded-2xl flex justify-center items-center gap-2 shadow-lg transition-all cursor-pointer ${
