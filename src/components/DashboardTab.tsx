@@ -1,14 +1,16 @@
-import React, { useState, useMemo } from 'react';
-import { ArrowUpDown, Calculator, Landmark, Share2, TrendingDown, TrendingUp, AlertCircle, RefreshCw, Activity, Scale } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { ArrowUpDown, Calculator, TrendingDown, TrendingUp, AlertCircle, Share2, Activity, Scale } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { ExchangeRate } from '../types';
+import { AnimatedNumber } from './AnimatedNumber';
 import { SkeletonCard, SkeletonListRow } from './SkeletonCard';
-import { SPREAD_HEALTHY_THRESHOLD, SPREAD_MODERATE_THRESHOLD, SPREAD_MAX_SCALE, FALLBACK_RATES } from '../constants';
+import { SPREAD_HEALTHY_THRESHOLD, SPREAD_MODERATE_THRESHOLD, SPREAD_MAX_SCALE } from '../constants';
 
 export const CALCULATOR_CURRENCIES = [
   { id: 'VES', name: 'Bolívares (VES)', code: 'VES', getRate: () => 1 },
-  { id: 'USD_B', name: 'USD BCV (Oficial)', code: 'USD', getRate: (ratesList: ExchangeRate[]) => ratesList.find(r => r.id === 'bcvUsd')?.rate || 36.24 },
-  { id: 'EUR', name: 'Euro (EUR)', code: 'EUR', getRate: (ratesList: ExchangeRate[]) => ratesList.find(r => r.id === 'bcvEur')?.rate || 39.12 },
-  { id: 'USDT', name: 'USDT Binance', code: 'USDT', getRate: (ratesList: ExchangeRate[]) => ratesList.find(r => r.id === 'binanceP2p')?.rate || 38.45 },
+  { id: 'USD_B', name: 'USD BCV (Oficial)', code: 'USD', getRate: (ratesList: ExchangeRate[]) => ratesList.find(r => r.id === 'bcvUsd')?.rate || 685.94 },
+  { id: 'EUR', name: 'Euro (EUR)', code: 'EUR', getRate: (ratesList: ExchangeRate[]) => ratesList.find(r => r.id === 'bcvEur')?.rate || 783.78 },
+  { id: 'USDT', name: 'USDT Binance', code: 'USDT', getRate: (ratesList: ExchangeRate[]) => ratesList.find(r => r.id === 'binanceP2p')?.rate || 817.00 },
 ];
 
 interface DashboardTabProps {
@@ -24,9 +26,33 @@ interface DashboardTabProps {
   isOffline?: boolean;
 }
 
-export const DashboardTab = React.memo<DashboardTabProps>(({ 
-  rates, 
-  onTriggerToast, 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.07, delayChildren: 0.05 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 24, scale: 0.97 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 200, damping: 22, mass: 0.6 },
+  },
+};
+
+const cardHover = {
+  rest: { scale: 1, y: 0 },
+  hover: { scale: 1.02, y: -2, transition: { type: 'spring', stiffness: 300, damping: 20 } },
+  tap: { scale: 0.98 },
+};
+
+export const DashboardTab = React.memo<DashboardTabProps>(({
+  rates,
+  onTriggerToast,
   onNavigateToAlerts,
   isFetching,
   onRefresh,
@@ -34,78 +60,40 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
   isCompactView,
   isEqualizedToBcv = false,
   isInitialLoading = false,
-  isOffline = false
+  isOffline = false,
 }) => {
-  // New customized calculator states (USD, EUR, USDT, VES)
   const [fromCurrency, setFromCurrency] = useState<string>('USD_B');
   const [toCurrency, setToCurrency] = useState<string>('VES');
-  const [calcAmount, setCalcAmount] = useState<number>(100);
-
-  // New right panel tab & gap states
+  const [calcAmount, setCalcAmount] = useState<number>(1);
   const [rightPanelTab, setRightPanelTab] = useState<'spread' | 'forecast'>('spread');
-  const [activeGapPair, setActiveGapPair] = useState<'bcv_binance'>('bcv_binance');
+  const [swapped, setSwapped] = useState(false);
 
-  // Derive calculator rate conversions
   const fromObj = CALCULATOR_CURRENCIES.find(c => c.id === fromCurrency) || CALCULATOR_CURRENCIES[1];
   const toObj = CALCULATOR_CURRENCIES.find(c => c.id === toCurrency) || CALCULATOR_CURRENCIES[0];
-
   const fromRate = fromObj.getRate(rates);
   const toRate = toObj.getRate(rates);
-
   const convertedAmount = toRate !== 0 ? (calcAmount * fromRate) / toRate : 0;
 
-  // Swap currencies
   const handleSwapCurrencies = () => {
+    setSwapped(p => !p);
     setFromCurrency(toCurrency);
     setToCurrency(fromCurrency);
     onTriggerToast('Dirección de conversión intercambiada', 'info');
   };
 
-  // Spreads analysis
-  const bcvRate = rates.find(r => r.id === 'bcvUsd')?.rate || 36.24;
-  const binRate = rates.find(r => r.id === 'binanceP2p')?.rate || 38.45;
-
+  const bcvRate = rates.find(r => r.id === 'bcvUsd')?.rate || 685.94;
+  const binRate = rates.find(r => r.id === 'binanceP2p')?.rate || 817.00;
   const gapBcvBinance = bcvRate > 0 ? ((binRate - bcvRate) / bcvRate) * 100 : 0;
   const diffBcvBinance = binRate - bcvRate;
-
-  // Active gap calculations based on selection
-  let activeGapLabel = 'BCV Oficial vs. Binance P2P';
-  let activeGapPct = gapBcvBinance;
-  let activeGapDiff = diffBcvBinance;
-  let activeGapSource = 'BCV (Oficial)';
-  let activeGapDest = 'Binance P2P';
+  const activeGapPct = gapBcvBinance;
+  const activeGapDiff = diffBcvBinance;
 
   const getSpreadLevel = (spreadPct: number) => {
     const absSpread = Math.abs(spreadPct);
-    if (absSpread === 0) {
-      return { 
-        label: 'Sin Brecha', 
-        color: 'text-success bg-success/10 border-success/20', 
-        barColor: 'bg-success', 
-        desc: 'Las tasas están perfectamente unificadas.' 
-      };
-    } else if (absSpread < SPREAD_HEALTHY_THRESHOLD) {
-      return { 
-        label: 'Saludable / Muy Bajo', 
-        color: 'text-success bg-success/10 border-success/20', 
-        barColor: 'bg-success', 
-        desc: 'Brecha saludable. El mercado oficial y el libre están alineados.' 
-      };
-    } else if (absSpread < SPREAD_MODERATE_THRESHOLD) {
-      return { 
-        label: 'Moderado', 
-        color: 'text-warning bg-warning/10 border-warning/20', 
-        barColor: 'bg-warning', 
-        desc: 'Brecha de mercado estándar. Monitoree de cerca para compras/ventas importantes.' 
-      };
-    } else {
-      return { 
-        label: 'Elevado (Distorsión)', 
-        color: 'text-error bg-error/10 border-error/20', 
-        barColor: 'bg-error', 
-        desc: 'Brecha amplia. Existe alta volatilidad y riesgo de desajuste de precios.' 
-      };
-    }
+    if (absSpread === 0) return { label: 'Sin Brecha', color: 'text-success bg-success/10 border-success/20', barColor: 'bg-emerald-400', desc: 'Las tasas están perfectamente unificadas.' };
+    if (absSpread < SPREAD_HEALTHY_THRESHOLD) return { label: 'Saludable', color: 'text-success bg-success/10 border-success/20', barColor: 'bg-emerald-400', desc: 'Brecha saludable. El mercado oficial y el libre están alineados.' };
+    if (absSpread < SPREAD_MODERATE_THRESHOLD) return { label: 'Moderado', color: 'text-warning bg-warning/10 border-warning/20', barColor: 'bg-amber-400', desc: 'Brecha de mercado estándar. Monitoree de cerca para compras/ventas importantes.' };
+    return { label: 'Elevado', color: 'text-tertiary bg-tertiary/10 border-tertiary/20', barColor: 'bg-rose-400', desc: 'Brecha amplia. Existe alta volatilidad y riesgo de desajuste de precios.' };
   };
 
   const currentLevel = getSpreadLevel(activeGapPct);
@@ -125,672 +113,510 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
     }
   };
 
+  const heroRate = rates.find(r => r.id === 'bcvUsd') || rates[0];
+  const prevRateRef = useRef(heroRate.rate);
+  const [heroFlash, setHeroFlash] = useState<'up' | 'down' | null>(null);
+
+  useEffect(() => {
+    if (heroRate.rate !== prevRateRef.current) {
+      setHeroFlash(heroRate.rate > prevRateRef.current ? 'up' : 'down');
+      prevRateRef.current = heroRate.rate;
+      const t = setTimeout(() => setHeroFlash(null), 800);
+      return () => clearTimeout(t);
+    }
+  }, [heroRate.rate]);
+
+  if (isInitialLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
+        </div>
+        <div className="block md:hidden space-y-4">
+          <div className="glass-card rounded-2xl overflow-hidden divide-y divide-white/[0.04]">
+            {[1, 2, 3].map(i => <SkeletonListRow key={i} />)}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div id="dashboard-tab" className="space-y-12 animate-fade-in">
-      {/* Header & Market Status */}
-      <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-        <div className="space-y-2">
-          <p className="font-mono text-xs text-secondary dark:text-secondary uppercase tracking-[0.2em] font-medium opacity-80">
+    <motion.div id="dashboard-tab" className="space-y-10" variants={containerVariants} initial="hidden" animate="visible">
+      <motion.header className="flex flex-col md:flex-row md:items-end justify-between gap-5" variants={itemVariants}>
+        <div className="space-y-1.5">
+          <p className="font-mono text-[11px] text-primary/70 uppercase tracking-[0.25em] font-semibold">
             Mercado en Vivo
           </p>
-          <h2 className="font-sans text-3xl md:text-4xl font-bold text-on-surface dark:text-white tracking-tight">
+          <h2 className="font-display text-3xl md:text-4xl font-bold tracking-tight text-[#eaecfa]">
             Tasas de Cambio
           </h2>
         </div>
-        
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 px-5 py-2.5 bg-secondary/10 text-secondary border border-secondary/20 rounded-full w-fit backdrop-blur-sm shadow-sm">
-            <span className="w-2.5 h-2.5 rounded-full bg-secondary animate-pulse shadow-[0_0_12px_rgba(137,206,255,0.5)]"></span>
-            <span className="font-mono text-[11px] uppercase font-bold tracking-widest">
-              Mercado Abierto
-            </span>
-          </div>
-        </div>
-      </header>
+        <motion.div
+          className="flex items-center gap-2.5 px-5 py-2.5 rounded-full glass border border-primary/10"
+          variants={itemVariants}
+        >
+          <motion.span
+            animate={{ scale: [1, 1.4, 1] }}
+            transition={{ repeat: Infinity, duration: 2.2, ease: 'easeInOut' }}
+            className="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"
+            style={{ boxShadow: '0 0 10px rgba(52,211,153,0.5)' }}
+          />
+          <span className="font-mono text-[10px] uppercase font-bold tracking-widest text-success/90">
+            Mercado Abierto
+          </span>
+        </motion.div>
+      </motion.header>
 
       {isEqualizedToBcv && (
-        <div id="bcv-equalized-banner" className="bg-primary/10 border border-primary/20 rounded-2xl p-5 flex gap-4 text-primary animate-fade-in">
+        <motion.div variants={itemVariants} className="glass-card rounded-2xl p-5 flex gap-4 text-primary/90">
           <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <h4 className="font-sans text-sm font-bold text-on-surface dark:text-white">
-              Modo Tasa Única BCV Activo
-            </h4>
-            <p className="font-sans text-xs text-on-surface-variant/80 leading-relaxed">
-              Para simplificar su facturación o administración comercial, todas las tasas de dólares (Binance P2P) han sido igualadas a la tasa oficial del Banco Central de Venezuela. Las calculadoras y comparativas utilizarán este valor.
+            <h4 className="font-sans text-sm font-bold text-[#eaecfa]">Modo Tasa Única BCV Activo</h4>
+            <p className="font-sans text-xs text-slate-400 leading-relaxed">
+              Para simplificar su facturación, todas las tasas de USD han sido igualadas a la tasa oficial del Banco Central de Venezuela.
             </p>
           </div>
-        </div>
+        </motion.div>
       )}
 
-      {/* Rates Monitoring Container */}
-      {isInitialLoading ? (
-        <div className="space-y-6">
-          <div className="block md:hidden space-y-4">
-            <div className="fluid-card rounded-2xl overflow-hidden divide-y divide-on-surface/5">
-              {[1, 2, 3].map(i => <SkeletonListRow key={i} />)}
+      <motion.div variants={itemVariants}>
+        <div
+          className={`glass-card rounded-3xl p-6 md:p-8 relative overflow-hidden transition-colors ${
+            heroFlash === 'up' ? 'animate-ticker-flash-green' : heroFlash === 'down' ? 'animate-ticker-flash-red' : ''
+          }`}
+        >
+          <div className="absolute -right-12 -top-12 w-48 h-48 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+          <div className="absolute -left-8 -bottom-8 w-36 h-36 rounded-full bg-secondary/8 blur-3xl pointer-events-none" />
+
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-[10px] text-primary/80 uppercase tracking-[0.3em] font-bold bg-primary/10 px-3 py-1 rounded-full border border-primary/20">
+                  PRINCIPAL
+                </span>
+                <span className="font-mono text-[10px] text-slate-500">
+                  Banco Central de Venezuela
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <AnimatedNumber
+                  value={heroRate.rate}
+                  className="font-display text-5xl md:text-7xl font-bold tracking-tight text-on-surface"
+                />
+                <p className="font-mono text-sm text-slate-400">
+                  VES / {heroRate.code}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <motion.span
+                  className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold border ${
+                    heroRate.change >= 0
+                      ? 'text-success bg-success/10 border-success/20'
+                      : 'text-tertiary bg-tertiary/10 border-tertiary/20'
+                  }`}
+                >
+                  {heroRate.change >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                  <span className="font-mono">{heroRate.change >= 0 ? '+' : ''}{heroRate.change.toFixed(2)}%</span>
+                </motion.span>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.92 }}
+                  onClick={() => handleShareRate(heroRate.name, heroRate.rate, heroRate.code)}
+                  className="p-2 rounded-full bg-white/[0.04] hover:bg-white/[0.08] text-slate-400 hover:text-on-surface transition-colors cursor-pointer"
+                >
+                  <Share2 className="w-4 h-4" />
+                </motion.button>
+              </div>
             </div>
-          </div>
-          <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
+
+            <div className="flex flex-col gap-3 justify-center">
+              {rates.filter(r => r.id !== 'bcvUsd').map(r => {
+                const isUp = r.change >= 0;
+                return (
+                  <div key={r.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors cursor-pointer">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-[10px] font-bold ${
+                        r.id === 'binanceP2p'
+                          ? 'bg-warning/15 text-warning border border-warning/20'
+                          : 'bg-secondary/10 text-secondary border border-secondary/20'
+                      }`}>
+                        {r.code}
+                      </span>
+                      <div>
+                        <p className="font-sans text-xs font-semibold text-[#eaecfa]">{r.name}</p>
+                        <p className="font-mono text-[10px] text-slate-500">{r.lastUpdated}</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-mono text-sm font-bold text-on-surface">{r.rate.toFixed(2)}</p>
+                      <p className={`font-mono text-[10px] font-semibold ${isUp ? 'text-success' : 'text-tertiary'}`}>
+                        {isUp ? '+' : ''}{r.change.toFixed(2)}%
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
-      ) : isCompactView ? (
-        <>
-          {/* Mobile Compact List View - Visible on small screens, hidden/fallback on larger */}
-          <div className="block md:hidden space-y-4">
-            <div className="fluid-card rounded-2xl overflow-hidden divide-y divide-on-surface/5">
-              {rates.map((rate) => {
-                const isUp = rate.change >= 0;
-                const isZero = rate.change === 0;
-                return (
-                  <div
-                    key={rate.id}
-                    onClick={() => {
-                      if (rate.id === 'binanceP2p') {
-                        setFromCurrency('USDT');
-                        setToCurrency('VES');
-                      } else if (rate.id === 'bcvUsd') {
-                        setFromCurrency('USD_B');
-                        setToCurrency('VES');
-                      } else if (rate.id === 'bcvEur') {
-                        setFromCurrency('EUR');
-                        setToCurrency('VES');
-                      } else {
-                        setFromCurrency('USD_B');
-                        setToCurrency('VES');
-                      }
-                    }}
-                    className="p-4 flex items-center justify-between hover:bg-white/5 active:bg-white/10 transition-colors cursor-pointer select-none"
-                  >
-                    <div className="flex items-center gap-3">
-                      {/* Currency Symbol Badge with neon glow */}
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-xs ${
-                        rate.id === 'binanceP2p'
-                          ? 'bg-primary/15 text-primary border border-primary/30 shadow-[0_0_12px_rgba(0,217,255,0.15)]'
-                          : isZero
-                            ? 'bg-surface-variant text-on-surface-variant border border-on-surface/5'
-                            : isUp
-                              ? 'bg-success/10 text-success border border-success/20'
-                              : 'bg-error/10 text-error border border-error/20'
-                      }`}>
-                        {rate.code === 'USDT' ? 'USDT' : rate.code}
-                      </div>
-                      <div>
-                        <h4 className="font-sans text-sm font-bold text-on-surface dark:text-white">
-                          {rate.name}
-                        </h4>
-                        <p className="font-sans text-[10px] text-on-surface-variant/70 leading-none">
-                          {rate.id === 'binanceP2p' ? 'P2P Promedio' : 'Tasa de Referencia'}
-                        </p>
-                      </div>
+      </motion.div>
+
+      {isCompactView ? (
+        <motion.div variants={itemVariants} className="block md:hidden space-y-3">
+          <div className="glass-card rounded-2xl overflow-hidden divide-y divide-white/[0.04]">
+            {rates.map((rate) => {
+              const isUp = rate.change >= 0;
+              return (
+                <motion.div
+                  key={rate.id}
+                  onClick={() => {
+                    if (rate.id === 'binanceP2p') { setFromCurrency('USDT'); setToCurrency('VES'); }
+                    else if (rate.id === 'bcvUsd') { setFromCurrency('USD_B'); setToCurrency('VES'); }
+                    else if (rate.id === 'bcvEur') { setFromCurrency('EUR'); setToCurrency('VES'); }
+                    else { setFromCurrency('USD_B'); setToCurrency('VES'); }
+                  }}
+                  whileHover={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
+                  whileTap={{ scale: 0.99 }}
+                  className="p-4 flex items-center justify-between cursor-pointer transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs border ${
+                      rate.id === 'binanceP2p'
+                        ? 'bg-warning/10 text-warning border-warning/20'
+                        : isUp ? 'bg-success/10 text-success border-success/20' : 'bg-tertiary/10 text-tertiary border-tertiary/20'
+                    }`}>
+                      {rate.code}
                     </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <span className="font-mono text-sm font-extrabold text-on-surface dark:text-white">
-                          {rate.rate.toFixed(2)}
-                        </span>
-                        <span className="font-mono text-[9px] text-on-surface-variant block leading-none">
-                          VES
-                        </span>
-                      </div>
-
-                      <div 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleShareRate(rate.name, rate.rate, rate.code);
-                        }}
-                        className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          isZero 
-                            ? 'bg-on-surface/5 text-on-surface-variant/60'
-                            : isUp 
-                              ? 'text-success bg-success/10' 
-                              : 'text-error bg-error/10'
-                        }`}
-                      >
-                        <span className="font-mono">
-                          {isZero ? '0.00' : isUp ? '+' : ''}{rate.change.toFixed(2)}%
-                        </span>
-                      </div>
+                    <div>
+                      <h4 className="font-sans text-sm font-bold text-on-surface">{rate.name}</h4>
+                      <p className="font-sans text-[10px] text-slate-500">{rate.lastUpdated}</p>
                     </div>
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Desktop/Tablet detailed Grid/List View - Hidden on mobile, visible on larger */}
-          <div className="hidden md:block">
-            {/* Bento Grid for Rates */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {rates.filter(r => ['bcvUsd', 'bcvEur', 'binanceP2p'].includes(r.id)).map((rate) => {
-                const isUp = rate.change >= 0;
-                return (
-                  <div
-                    key={rate.id}
-                    onClick={() => {
-                      if (rate.id === 'binanceP2p') {
-                        setFromCurrency('USDT');
-                        setToCurrency('VES');
-                      } else if (rate.id === 'bcvUsd') {
-                        setFromCurrency('USD_B');
-                        setToCurrency('VES');
-                      } else if (rate.id === 'bcvEur') {
-                        setFromCurrency('EUR');
-                        setToCurrency('VES');
-                      }
-                    }}
-                    className={`p-6 rounded-2xl flex flex-col justify-between min-h-[190px] transition-all duration-300 hover:scale-[1.02] cursor-pointer group relative overflow-hidden ${
-                      rate.id === 'binanceP2p'
-                        ? 'bg-primary/10 border border-primary/30 shadow-[0_0_30px_rgba(0,217,255,0.12)]'
-                        : isUp
-                          ? 'bg-gradient-to-br from-success/5 via-surface-container/50 to-surface-container border border-success/20 shadow-[0_0_30px_rgba(0,255,136,0.06)]'
-                          : 'fluid-card'
-                    }`}
-                  >
-                    {/* Glow overlay */}
-                    <div className={`absolute -right-6 -top-6 w-32 h-32 rounded-full blur-3xl group-hover:scale-150 transition-all duration-700 ${
-                      rate.id === 'binanceP2p'
-                        ? 'bg-primary/15'
-                        : isUp
-                          ? 'bg-success/10'
-                          : 'bg-error/10'
-                    }`}></div>
-
-                    <div className="flex justify-between items-start relative z-10">
-                      <div className="space-y-1">
-                        <h3 className="font-sans text-lg font-bold text-on-surface dark:text-white group-hover:text-primary transition-colors">
-                          {rate.name}
-                        </h3>
-                        <p className="font-sans text-xs text-on-surface-variant/80">
-                          {rate.id === 'binanceP2p' ? 'USDT Promedio' : 'Oficial Venezuela'}
-                        </p>
-                      </div>
-
-                      <div 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleShareRate(rate.name, rate.rate, rate.code);
-                        }}
-                        className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold ${
-                          isUp 
-                            ? 'text-success bg-success/10 border-success/20 shadow-[0_0_12px_rgba(0,255,136,0.1)]' 
-                            : 'text-error bg-error/10 border-error/20 shadow-[0_0_12px_rgba(255,51,102,0.1)]'
-                        }`}
-                      >
-                        <TrendingUp className={`w-3.5 h-3.5 ${!isUp ? 'rotate-180' : ''}`} />
-                        <span className="font-mono">
-                          {isUp ? '+' : ''}{rate.change.toFixed(2)}%
-                        </span>
-                      </div>
+                  <div className="flex items-center gap-4">
+                    <div className="text-right">
+                      <AnimatedNumber value={rate.rate} className="font-mono text-sm font-extrabold text-on-surface" />
+                      <span className="font-mono text-[9px] text-slate-500 block">VES</span>
                     </div>
-
-                    <div className="mt-8 flex items-baseline justify-between relative z-10">
-                      <div className="flex items-baseline gap-2">
-                        <span className={`font-sans text-4xl font-extrabold tracking-tight ${
-                          rate.id === 'binanceP2p' ? 'text-primary' : 'text-on-surface dark:text-white'
-                        }`}>
-                          {rate.rate.toFixed(2)}
-                        </span>
-                        <span className="font-mono text-xs text-on-surface-variant uppercase">
-                          VES/{rate.code}
-                        </span>
-                      </div>
-
-                      <button 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleShareRate(rate.name, rate.rate, rate.code);
-                        }}
-                        aria-label={`Compartir tasa de ${rate.name}`}
-                        className="p-2 rounded-full bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10"
-                      >
-                        <Share2 className="w-4 h-4 text-on-surface-variant" />
-                      </button>
-                    </div>
+                    <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                      rate.change === 0 ? 'bg-white/[0.03] text-slate-500' : isUp ? 'text-success bg-success/10' : 'text-tertiary bg-tertiary/10'
+                    }`}>
+                      {rate.change === 0 ? '0.00' : isUp ? '+' : ''}{rate.change.toFixed(2)}%
+                    </span>
                   </div>
-                );
-              })}
-            </div>
+                </motion.div>
+              );
+            })}
           </div>
-        </>
+        </motion.div>
       ) : (
-        /* Regular Detailed layout for all screen sizes */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {rates.filter(r => ['bcvUsd', 'bcvEur', 'binanceP2p'].includes(r.id)).map((rate) => {
+        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {rates.filter(r => ['bcvUsd', 'bcvEur', 'binanceP2p'].includes(r.id)).map((rate, idx) => {
             const isUp = rate.change >= 0;
             return (
-              <div
+              <motion.div
                 key={rate.id}
+                variants={itemVariants}
+                initial="rest"
+                whileHover="hover"
+                whileTap="tap"
                 onClick={() => {
-                  if (rate.id === 'binanceP2p') {
-                    setFromCurrency('USDT');
-                    setToCurrency('VES');
-                  } else if (rate.id === 'bcvUsd') {
-                    setFromCurrency('USD_B');
-                    setToCurrency('VES');
-                  } else if (rate.id === 'bcvEur') {
-                    setFromCurrency('EUR');
-                    setToCurrency('VES');
-                  }
+                  if (rate.id === 'binanceP2p') { setFromCurrency('USDT'); setToCurrency('VES'); }
+                  else if (rate.id === 'bcvUsd') { setFromCurrency('USD_B'); setToCurrency('VES'); }
+                  else if (rate.id === 'bcvEur') { setFromCurrency('EUR'); setToCurrency('VES'); }
                 }}
-                className={`p-6 rounded-2xl flex flex-col justify-between min-h-[190px] transition-all duration-300 hover:scale-[1.02] cursor-pointer group relative overflow-hidden ${
+                className={`glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[200px] cursor-pointer relative overflow-hidden ${
                   rate.id === 'binanceP2p'
-                    ? 'bg-primary/10 border border-primary/30 shadow-[0_0_30px_rgba(0,217,255,0.12)]'
-                    : isUp
-                      ? 'bg-gradient-to-br from-success/5 via-surface-container/50 to-surface-container border border-success/20 shadow-[0_0_30px_rgba(0,255,136,0.06)]'
-                      : 'fluid-card'
+                    ? 'border-warning/15'
+                    : ''
                 }`}
               >
-                {/* Dynamic glow overlay */}
-                <div className={`absolute -right-6 -top-6 w-32 h-32 rounded-full blur-3xl group-hover:scale-150 transition-all duration-700 ${
-                  rate.id === 'binanceP2p'
-                    ? 'bg-primary/15'
-                    : isUp
-                      ? 'bg-success/10'
-                      : 'bg-error/10'
-                }`}></div>
+                <motion.div
+                  className={`absolute -right-6 -top-6 w-28 h-28 rounded-full blur-3xl pointer-events-none ${
+                    rate.id === 'binanceP2p' ? 'bg-warning/15' : isUp ? 'bg-success/10' : 'bg-tertiary/10'
+                  }`}
+                  animate={{ scale: [1, 1.3, 1] }}
+                  transition={{ repeat: Infinity, duration: 6, ease: 'easeInOut' }}
+                />
 
                 <div className="flex justify-between items-start relative z-10">
                   <div className="space-y-1">
-                    <h3 className="font-sans text-lg font-bold text-on-surface dark:text-white group-hover:text-primary transition-colors">
-                      {rate.name}
-                    </h3>
-                    <p className="font-sans text-xs text-on-surface-variant/80">
-                      {rate.id === 'binanceP2p' ? 'USDT Promedio' : 'Oficial Venezuela'}
-                    </p>
+                    <h3 className="font-display text-base font-bold text-on-surface">{rate.name}</h3>
+                    <p className="font-sans text-[11px] text-slate-500">{rate.id === 'binanceP2p' ? 'USDT P2P Promedio' : 'Oficial Venezuela'}</p>
                   </div>
-
-                  <div 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleShareRate(rate.name, rate.rate, rate.code);
-                    }}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-xs font-semibold ${
-                      isUp 
-                        ? 'text-success bg-success/10 border-success/20 shadow-[0_0_12px_rgba(0,255,136,0.1)]' 
-                        : 'text-error bg-error/10 border-error/20 shadow-[0_0_12px_rgba(255,51,102,0.1)]'
+                  <motion.span
+                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border ${
+                      isUp ? 'text-success bg-success/10 border-success/20' : 'text-tertiary bg-tertiary/10 border-tertiary/20'
                     }`}
                   >
-                    {isUp ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                    <span className="font-mono">
-                      {isUp ? '+' : ''}{rate.change.toFixed(2)}%
-                    </span>
-                  </div>
+                    {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                    <span className="font-mono">{isUp ? '+' : ''}{rate.change.toFixed(2)}%</span>
+                  </motion.span>
                 </div>
 
                 <div className="mt-8 flex items-baseline justify-between relative z-10">
                   <div className="flex items-baseline gap-2">
-                    <span className={`font-sans text-4xl font-extrabold tracking-tight ${
-                      rate.id === 'binanceP2p' ? 'text-primary' : 'text-on-surface dark:text-white'
-                    }`}>
-                      {rate.rate.toFixed(2)}
-                    </span>
-                    <span className="font-mono text-xs text-on-surface-variant uppercase">
-                      VES/{rate.code}
-                    </span>
+                    <AnimatedNumber
+                      value={rate.rate}
+                      className={`font-display text-3xl md:text-4xl font-extrabold tracking-tight ${
+                        rate.id === 'binanceP2p' ? 'text-warning/90' : 'text-on-surface'
+                      }`}
+                    />
+                    <span className="font-mono text-[11px] text-slate-500 uppercase">VES/{rate.code}</span>
                   </div>
-
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleShareRate(rate.name, rate.rate, rate.code);
-                    }}
-                    className="p-2 rounded-full bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-white/10"
+                  <motion.button
+                    whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={(e) => { e.stopPropagation(); handleShareRate(rate.name, rate.rate, rate.code); }}
+                    className="p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                   >
-                    <Share2 className="w-4 h-4 text-on-surface-variant" />
-                  </button>
+                    <Share2 className="w-4 h-4 text-slate-400" />
+                  </motion.button>
                 </div>
-              </div>
+              </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
 
-      {/* Conversion Section & Weekly Insights */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-        {/* Quick Calculator */}
-        <section id="quick-calculator-panel" className="lg:col-span-3 fluid-card p-8 rounded-2xl space-y-6">
+        <motion.section variants={itemVariants} className="lg:col-span-3 glass-card rounded-3xl p-6 md:p-8 space-y-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-11 h-11 bg-secondary/10 rounded-xl flex items-center justify-center border border-secondary/20 animate-fade-in">
+              <motion.div
+                whileHover={{ scale: 1.05, rotate: 5 }}
+                className="w-11 h-11 rounded-xl bg-secondary/10 flex items-center justify-center border border-secondary/20"
+              >
                 <Calculator className="text-secondary w-5 h-5" />
-              </div>
+              </motion.div>
               <div>
-                <h3 className="font-sans text-lg font-bold text-on-surface dark:text-white">
-                  Conversor Cambiario Rápido
-                </h3>
-                <p className="font-sans text-xs text-on-surface-variant/80">
-                  Calculadora integrada bidireccional en tiempo real
-                </p>
+                <h3 className="font-display text-lg font-bold text-on-surface">Conversor Cambiario</h3>
+                <p className="font-sans text-[11px] text-slate-500">Calculadora bidireccional en tiempo real</p>
               </div>
             </div>
           </div>
 
           <div className="space-y-5">
-            {/* Input 1 (From Currency Selection & Input) */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between ml-2">
-                <span className="flex items-center gap-2">
-                  <label className="font-mono text-[11px] text-on-surface-variant tracking-wider font-semibold uppercase">
-                    De
-                  </label>
-                  <span className="text-[10px] font-mono font-bold text-secondary bg-secondary/10 px-2 py-0.5 rounded-full">
-                    Tasa: {fromRate.toFixed(2)} VES
-                  </span>
-                </span>
+              <div className="flex items-center justify-between">
+                <label className="font-mono text-[10px] text-slate-500 tracking-wider font-semibold uppercase">De</label>
                 <select
-                  id="calc-from-selector"
                   value={fromCurrency}
-                  onChange={(e) => {
-                    setFromCurrency(e.target.value);
-                  }}
-                  className="bg-surface-container-low dark:bg-surface-container-lowest border border-on-surface/5 rounded-lg px-2.5 py-1 text-xs text-on-surface font-semibold outline-none cursor-pointer hover:border-primary/50 transition-all"
+                  onChange={(e) => setFromCurrency(e.target.value)}
+                  className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-1.5 text-xs text-slate-300 font-semibold outline-none cursor-pointer hover:border-primary/30 transition-all"
                 >
-                  {CALCULATOR_CURRENCIES.map(curr => (
-                    <option key={curr.id} value={curr.id}>{curr.name}</option>
+                  {CALCULATOR_CURRENCIES.filter(c => c.id !== toCurrency).map(curr => (
+                    <option key={curr.id} value={curr.id} className="bg-[#12152a]">{curr.name}</option>
                   ))}
                 </select>
               </div>
               <div className="relative">
                 <input
-                  id="calc-source-input"
                   type="number"
                   value={calcAmount === 0 ? '' : calcAmount}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    setCalcAmount(isNaN(val) ? 0 : val);
-                  }}
-                  className="w-full bg-surface-container-lowest/50 border border-on-surface/5 rounded-xl px-5 py-4 font-mono text-2xl text-on-surface outline-none focus:border-primary/50 transition-all placeholder:text-on-surface-variant/30"
+                  onChange={(e) => { const v = parseFloat(e.target.value); setCalcAmount(isNaN(v) ? 0 : v); }}
+                  className="w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl px-5 py-4 font-mono text-2xl text-on-surface outline-none focus:border-primary/30 transition-all placeholder:text-slate-700"
                   placeholder="0.00"
                 />
-                <div className="absolute right-5 top-1/2 -translate-y-1/2 text-on-surface-variant font-bold tracking-wider text-xs bg-on-surface/5 px-3 py-1.5 rounded-lg border border-on-surface/5">
+                <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs bg-white/[0.04] px-3 py-1.5 rounded-xl border border-white/[0.05]">
                   {fromObj.code}
                 </div>
               </div>
             </div>
 
-            {/* Swap Button container */}
             <div className="flex justify-center -my-3 relative z-10">
-              <button
-                id="btn-calc-swap"
+              <motion.button
                 onClick={handleSwapCurrencies}
-                aria-label="Invertir dirección de conversión"
-                className="bg-surface-bright dark:bg-surface-container-high p-3.5 rounded-full border border-on-surface/5 hover:rotate-180 transition-transform duration-500 shadow-lg cursor-pointer text-primary hover:text-secondary group"
-                title="Invertir dirección"
+                animate={{ rotate: swapped ? 180 : 0 }}
+                transition={{ type: 'spring', stiffness: 260, damping: 18 }}
+                whileHover={{ scale: 1.1, backgroundColor: 'rgba(34,211,238,0.1)' }}
+                whileTap={{ scale: 0.9 }}
+                className="glass p-3.5 rounded-full border border-white/[0.06] cursor-pointer text-primary shadow-lg"
+                aria-label="Invertir dirección"
               >
-                <ArrowUpDown className="w-5 h-5 group-hover:scale-110 transition-transform" />
-              </button>
+                <ArrowUpDown className="w-5 h-5" />
+              </motion.button>
             </div>
 
-            {/* Input 2 (To Currency Selection & Result) */}
             <div className="space-y-2">
-              <div className="flex items-center justify-between ml-2">
-                <span className="flex items-center gap-2">
-                  <label className="font-mono text-[11px] text-on-surface-variant tracking-wider font-semibold uppercase">
-                    A
-                  </label>
-                  <span className="text-[10px] font-mono font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">
-                    Tasa: {toRate.toFixed(2)} VES
-                  </span>
-                </span>
+              <div className="flex items-center justify-between">
+                <label className="font-mono text-[10px] text-slate-500 tracking-wider font-semibold uppercase">A</label>
                 <select
-                  id="calc-to-selector"
                   value={toCurrency}
-                  onChange={(e) => {
-                    setToCurrency(e.target.value);
-                  }}
-                  className="bg-surface-container-low dark:bg-surface-container-lowest border border-on-surface/5 rounded-lg px-2.5 py-1 text-xs text-on-surface font-semibold outline-none cursor-pointer hover:border-primary/50 transition-all"
+                  onChange={(e) => setToCurrency(e.target.value)}
+                  className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-1.5 text-xs text-slate-300 font-semibold outline-none cursor-pointer hover:border-primary/30 transition-all"
                 >
-                  {CALCULATOR_CURRENCIES.map(curr => (
-                    <option key={curr.id} value={curr.id}>{curr.name}</option>
+                  {CALCULATOR_CURRENCIES.filter(c => c.id !== fromCurrency).map(curr => (
+                    <option key={curr.id} value={curr.id} className="bg-[#12152a]">{curr.name}</option>
                   ))}
                 </select>
               </div>
               <div className="relative">
                 <input
-                  id="calc-destination-input"
                   type="number"
                   value={convertedAmount === 0 ? '' : parseFloat(convertedAmount.toFixed(4))}
                   onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    const destVal = isNaN(val) ? 0 : val;
-                    if (fromRate !== 0) {
-                      setCalcAmount((destVal * toRate) / fromRate);
-                    }
+                    const v = parseFloat(e.target.value);
+                    if (fromRate !== 0) setCalcAmount(isNaN(v) ? 0 : (v * toRate) / fromRate);
                   }}
-                  className="w-full bg-surface-container-lowest/50 border border-on-surface/5 rounded-xl px-5 py-4 font-mono text-2xl text-on-surface outline-none focus:border-primary/50 transition-all placeholder:text-on-surface-variant/30"
+                  className="w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl px-5 py-4 font-mono text-2xl text-on-surface outline-none focus:border-primary/30 transition-all placeholder:text-slate-700"
                   placeholder="0.00"
                 />
-                <div className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary font-bold tracking-wider text-xs bg-secondary/10 px-3 py-1.5 rounded-lg border border-secondary/10">
+                <div className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary font-bold text-xs bg-secondary/10 px-3 py-1.5 rounded-xl border border-secondary/15">
                   {toObj.code}
                 </div>
               </div>
             </div>
 
-            {/* Quick Presets Section */}
-            <div className="pt-2">
-              <div className="flex flex-wrap gap-2 justify-start items-center">
-                <span className="text-[10px] font-mono text-on-surface-variant/60 uppercase tracking-wider mr-1">Preajustes:</span>
-                {fromObj.code === 'VES' ? (
-                  [500, 1000, 2000, 5000].map(val => (
-                    <button
-                      key={val}
-                      onClick={() => {
-                        setCalcAmount(val);
-                      }}
-                      className="px-3 py-1 text-xs font-mono font-bold bg-surface-container-low/80 hover:bg-primary hover:text-white rounded-lg border border-on-surface/5 transition-all text-on-surface cursor-pointer"
-                    >
-                      Bs {val.toLocaleString('es-VE')}
-                    </button>
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-[10px] font-mono text-slate-600 uppercase tracking-wider mr-1">Preajustes:</span>
+              {fromObj.code === 'VES'
+                ? [500, 1000, 2000, 5000].map(v => (
+                    <motion.button key={v} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }} onClick={() => setCalcAmount(v)}
+                      className="px-3 py-1 text-xs font-mono font-bold bg-white/[0.03] hover:bg-primary/20 hover:text-primary/90 rounded-xl border border-white/[0.05] transition-colors text-slate-400 cursor-pointer">
+                      Bs {v.toLocaleString('es-VE')}
+                    </motion.button>
                   ))
-                ) : (
-                  [10, 50, 100, 500].map(val => (
-                    <button
-                      key={val}
-                      onClick={() => {
-                        setCalcAmount(val);
-                      }}
-                      className="px-3 py-1 text-xs font-mono font-bold bg-surface-container-low/80 hover:bg-primary hover:text-white rounded-lg border border-on-surface/5 transition-all text-on-surface cursor-pointer"
-                    >
-                      {fromObj.code === 'EUR' ? '€' : '$'}{val}
-                    </button>
-                  ))
-                )}
-                <button
-                  onClick={() => {
-                    setCalcAmount(0);
-                    onTriggerToast('Campos vaciados', 'info');
-                  }}
-                  className="ml-auto px-3 py-1 text-xs font-semibold bg-tertiary/10 text-tertiary hover:bg-tertiary/20 rounded-lg border border-tertiary/10 transition-all cursor-pointer"
-                >
-                  Limpiar
-                </button>
-              </div>
+                : [10, 50, 100, 500].map(v => (
+                    <motion.button key={v} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }} onClick={() => setCalcAmount(v)}
+                      className="px-3 py-1 text-xs font-mono font-bold bg-white/[0.03] hover:bg-primary/20 hover:text-primary/90 rounded-xl border border-white/[0.05] transition-colors text-slate-400 cursor-pointer">
+                      {fromObj.code === 'EUR' ? '€' : '$'}{v}
+                    </motion.button>
+                  ))}
+              <motion.button
+                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                onClick={() => { setCalcAmount(0); onTriggerToast('Campos vaciados', 'info'); }}
+                className="ml-auto px-3 py-1 text-xs font-semibold bg-tertiary/10 text-tertiary hover:bg-tertiary/20 rounded-xl border border-tertiary/15 transition-colors cursor-pointer"
+              >
+                Limpiar
+              </motion.button>
             </div>
 
-            {/* Calculation formula breakdown */}
-            <div className="p-3 bg-surface-container-lowest/40 rounded-xl border border-on-surface/5 flex flex-wrap items-center justify-center gap-2 text-xs font-mono text-on-surface-variant leading-relaxed">
-              <span>Fórmula:</span>
-              <span className="font-bold text-on-surface">{calcAmount.toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
-              <span>{fromObj.code}</span>
-              <span>×</span>
-              <span className="font-bold text-on-surface">{(fromRate / toRate).toFixed(4)}</span>
-              <span>=</span>
-              <span className="font-bold text-primary">{(convertedAmount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            <div className="p-3 bg-white/[0.02] rounded-xl border border-white/[0.04] flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-mono text-slate-500">
+              <span>1 {fromObj.code}</span>
+              <span>≈</span>
+              <span className="font-bold text-primary/90">{(fromRate / toRate).toFixed(4)}</span>
               <span>{toObj.code}</span>
             </div>
-
-            <div className="text-center font-mono text-[10px] text-on-surface-variant/70 italic space-y-0.5">
-              <p>
-                1 {fromObj.code} ≈ {(fromRate / toRate).toFixed(4)} {toObj.code}
-              </p>
-              <p className="text-[9px] opacity-75">
-                (Actualización en vivo en base a cotizaciones activas en la plataforma)
-              </p>
-            </div>
           </div>
-        </section>
+        </motion.section>
 
-        {/* Weekly Insights & Spread Monitor Card */}
-        <section id="analysis-panel" className="lg:col-span-2 fluid-card p-6 md:p-8 rounded-2xl flex flex-col justify-between space-y-6">
-          {/* Header tabs to switch between Spread and Projections */}
-          <div className="flex items-center justify-between border-b border-on-surface/10 pb-4">
-            <div className="flex gap-2">
-              <button
-                onClick={() => setRightPanelTab('spread')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all uppercase cursor-pointer ${
-                  rightPanelTab === 'spread'
-                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-on-surface/5'
-                }`}
-              >
-                Brecha Cambiaria
-              </button>
-              <button
-                onClick={() => setRightPanelTab('forecast')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-bold tracking-wide transition-all uppercase cursor-pointer ${
-                  rightPanelTab === 'forecast'
-                    ? 'bg-primary text-white shadow-lg shadow-primary/20'
-                    : 'text-on-surface-variant hover:text-on-surface hover:bg-on-surface/5'
-                }`}
-              >
-                Proyecciones
-              </button>
+        <motion.section variants={itemVariants} className="lg:col-span-2 glass-card rounded-3xl p-6 md:p-8 flex flex-col justify-between space-y-6">
+          <div className="flex items-center justify-between border-b border-white/[0.04] pb-4">
+            <div className="flex bg-white/[0.03] rounded-xl p-1 gap-1">
+              {(['spread', 'forecast'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setRightPanelTab(tab)}
+                  className={`relative px-4 py-2 rounded-[10px] text-[11px] font-bold tracking-wide uppercase transition-colors cursor-pointer ${
+                    rightPanelTab === tab ? 'text-on-surface' : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {rightPanelTab === tab && (
+                    <motion.div layoutId="analysis-pill" className="absolute inset-1 rounded-[8px] bg-gradient-to-r from-primary/20 to-secondary/15 border border-primary/15" transition={{ type: 'spring', stiffness: 400, damping: 28 }} />
+                  )}
+                  <span className="relative z-10">{tab === 'spread' ? 'Brecha' : 'Proyección'}</span>
+                </button>
+              ))}
             </div>
-            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
-              <Activity className="w-4 h-4 text-primary animate-pulse" />
-            </div>
+            <motion.div animate={{ scale: [1, 1.15, 1] }} transition={{ repeat: Infinity, duration: 3, ease: 'easeInOut' }}
+              className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center border border-primary/20">
+              <Activity className="w-4 h-4 text-primary" />
+            </motion.div>
           </div>
 
           {rightPanelTab === 'spread' ? (
             <div className="space-y-5 flex-1 flex flex-col justify-between">
-              {/* Spread calculations content */}
               <div className="space-y-4">
                 <div>
-                  <h4 className="font-sans text-base font-bold text-on-surface dark:text-white">
-                    Monitor de Diferencial (Spread)
-                  </h4>
-                  <p className="font-sans text-xs text-on-surface-variant/80">
-                    Mide la diferencia porcentual entre referencias cambiarias de Venezuela.
-                  </p>
+                  <h4 className="font-display text-base font-bold text-on-surface">Monitor de Diferencial</h4>
+                  <p className="font-sans text-[11px] text-slate-500">Diferencia BCV Oficial vs. Binance P2P</p>
                 </div>
 
-                <div className="h-2"></div>
-
-                {/* Detail Box */}
-                <div className="p-4 bg-surface-container-lowest/60 rounded-xl border border-on-surface/5 space-y-3 relative overflow-hidden">
+                <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.04] space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-[10px] text-on-surface-variant/80 uppercase font-bold tracking-wider">
-                      {activeGapLabel}
-                    </span>
+                    <span className="font-mono text-[10px] text-slate-500 uppercase tracking-wider">BCV vs Binance P2P</span>
                     <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold border ${currentLevel.color}`}>
                       {currentLevel.label}
                     </span>
                   </div>
 
                   <div className="flex items-baseline gap-3">
-                    <span className="font-sans text-3xl font-extrabold text-on-surface dark:text-white tracking-tight">
+                    <span className="font-display text-3xl font-extrabold text-on-surface">
                       {isEqualizedToBcv ? '0.00%' : `${activeGapPct >= 0 ? '+' : ''}${activeGapPct.toFixed(2)}%`}
                     </span>
-                    <span className="font-mono text-xs text-on-surface-variant">
-                      Diferencia: {isEqualizedToBcv ? '0.00' : `${activeGapDiff >= 0 ? '+' : ''}${activeGapDiff.toFixed(2)}`} VES
+                    <span className="font-mono text-[11px] text-slate-500">
+                      Δ {isEqualizedToBcv ? '0.00' : `${activeGapDiff >= 0 ? '+' : ''}${activeGapDiff.toFixed(2)}`} VES
                     </span>
                   </div>
 
-                  {/* Horizontal gauge bar */}
                   <div className="space-y-1.5">
-                    <div className="w-full h-2 rounded-full bg-surface-container-low overflow-hidden relative border border-on-surface/5">
-                      {/* Color zones: emerald (0-2), amber (2-6), rose (6-10) */}
+                    <div className="w-full h-2 rounded-full bg-white/[0.04] overflow-hidden relative">
                       <div className="absolute inset-0 flex">
-                        <div className="w-[20%] h-full bg-success/20"></div>
-                        <div className="w-[40%] h-full bg-warning/20"></div>
-                        <div className="w-[40%] h-full bg-error/20"></div>
+                        <div className="w-[20%] h-full bg-success/20" />
+                        <div className="w-[40%] h-full bg-warning/20" />
+                        <div className="w-[40%] h-full bg-tertiary/20" />
                       </div>
-                      {/* Dynamic cursor */}
                       {!isEqualizedToBcv && (
-                        <div 
-                          className={`absolute top-0 bottom-0 w-3 rounded-full -translate-x-1/2 border border-white/40 shadow-sm ${currentLevel.barColor}`}
-                          style={{ left: `${Math.min(Math.max((activeGapPct / SPREAD_MAX_SCALE) * 100, 4), 96)}%` }}
-                        ></div>
-                      )}
-                      {isEqualizedToBcv && (
-                        <div className="absolute top-0 bottom-0 left-0 w-3 rounded-full bg-emerald-500 border border-white/40 shadow-sm"></div>
+                        <motion.div
+                          className={`absolute top-0 bottom-0 w-3 rounded-full border border-white/30 ${currentLevel.barColor}`}
+                          animate={{ left: `${Math.min(Math.max((activeGapPct / SPREAD_MAX_SCALE) * 100, 3), 97)}%` }}
+                          transition={{ type: 'spring', stiffness: 100, damping: 18 }}
+                          style={{ translateX: '-50%' }}
+                        />
                       )}
                     </div>
-                    <div className="flex justify-between font-mono text-[8px] text-on-surface-variant/60 uppercase">
-                      <span>0% Alineado</span>
-                      <span>5% Promedio</span>
-                      <span>10%+ Distorsión</span>
+                    <div className="flex justify-between font-mono text-[8px] text-slate-600">
+                      <span>0%</span><span>5%</span><span>10%+</span>
                     </div>
                   </div>
 
-                  <p className="font-sans text-xs text-on-surface-variant leading-relaxed">
-                    {currentLevel.desc}
-                  </p>
+                  <p className="font-sans text-[11px] text-slate-500 leading-relaxed">{currentLevel.desc}</p>
                 </div>
               </div>
 
-              {/* Invoicing warning if equalized is active */}
               {isEqualizedToBcv ? (
-                <div className="p-3 bg-primary/10 border border-primary/20 rounded-xl text-[11px] text-primary space-y-1">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 shrink-0" />
-                    <span>Modo Tasa Única BCV Activo</span>
-                  </div>
-                  <p className="leading-relaxed opacity-90">
-                    Las brechas del monitor se visualizan como 0.00% porque forzó a todas las referencias a igualar el valor BCV oficial.
-                  </p>
+                <div className="p-3 bg-primary/10 border border-primary/20 rounded-xl text-[11px] text-primary/90 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5"><Scale className="w-3.5 h-3.5" /><span>Modo Tasa Única BCV Activo</span></div>
+                  <p className="leading-relaxed opacity-90">Las brechas se muestran como 0.00% porque todas las referencias igualan al BCV.</p>
                 </div>
               ) : (
-                <div className="p-3 bg-secondary/10 border border-secondary/20 rounded-xl text-[11px] text-secondary space-y-1">
-                  <div className="font-bold flex items-center gap-1.5">
-                    <Scale className="w-3.5 h-3.5 shrink-0" />
-                    <span>Recomendación de Operación</span>
-                  </div>
-                  <p className="leading-relaxed opacity-90">
-                    Por ley en Venezuela, los cobros en comercios deben regirse estrictamente por la tasa oficial del BCV. El diferencial respecto a Binance representa la fluctuación del mercado cripto e informal.
-                  </p>
+                <div className="p-3 bg-secondary/10 border border-secondary/20 rounded-xl text-[11px] text-secondary/90 space-y-1">
+                  <div className="font-bold flex items-center gap-1.5"><Scale className="w-3.5 h-3.5" /><span>Recomendación</span></div>
+                  <p className="leading-relaxed opacity-90">Por ley en Venezuela, los cobros deben regirse por la tasa oficial del BCV.</p>
                 </div>
               )}
             </div>
           ) : (
-            /* Forecast panel with the exact same beautiful original forecast component structure! */
-            <div className="space-y-4 flex-1 flex flex-col justify-end min-h-[300px] relative rounded-xl overflow-hidden p-6 group">
-              <div className="absolute inset-0 z-0 transition-transform duration-[4000ms] group-hover:scale-110">
-                <div 
-                  className="w-full h-full bg-cover bg-center" 
-                  style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBhtx1l3eE-MCiGv_fbacv5WIZcJQbdNM4G9GqFRDn5F4rCs-801bj6b1TOtM7RPl7QixrWL_ilSVZI1pETxs9qJlAmIcvTKBufFamaW8sJBFeZ3mfK9wUuciEWQEd5vWxdxoaM85esu8_32nkfx-R1ScHHys-lcFH8hPkrn0ml0FREAOnQFLSEZY777EJVnJkLeVwkU2qgRpaJIIEESsB2W0jhYUayUNGE3jVy7eCDM2U6xeq98BPQuw')" }}
-                ></div>
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-transparent"></div>
+            <div className="space-y-4 flex-1 flex flex-col justify-end min-h-[300px] relative rounded-2xl overflow-hidden p-6 group">
+              <div className="absolute inset-0">
+                <div className="w-full h-full bg-gradient-to-br from-violet-500/8 via-transparent to-cyan-500/8" />
+                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,0.06)_0%,transparent_50%),radial-gradient(circle_at_70%_80%,rgba(139,92,246,0.06)_0%,transparent_50%)]" />
               </div>
-              
               <div className="relative z-10 space-y-4">
-                <div className="inline-flex items-center gap-1.5 bg-tertiary/20 text-tertiary px-3.5 py-1 rounded-full border border-tertiary/30 backdrop-blur-md">
+                <div className="inline-flex items-center gap-1.5 bg-tertiary/15 text-tertiary/90 px-3.5 py-1 rounded-full border border-tertiary/20 backdrop-blur-md">
                   <TrendingUp className="w-3 h-3" />
                   <span className="font-mono text-[9px] uppercase font-bold tracking-wider">Tendencia Alcista</span>
                 </div>
-                
-                <h4 className="font-sans text-lg font-bold text-on-surface dark:text-white">
-                  Proyección Semanal
-                </h4>
-                
-                <p className="font-sans text-xs text-on-surface-variant leading-relaxed opacity-95">
+                <h4 className="font-display text-lg font-bold text-on-surface">Proyección Semanal</h4>
+                <p className="font-sans text-xs text-slate-400 leading-relaxed">
                   Se observa una volatilidad moderada en el par VES/USDT durante las últimas 72 horas debido a los ajustes de liquidez semanal. Se aconseja mantener activos sus avisos en tiempo real para capturar fluctuaciones.
                 </p>
-
-                <button 
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={onNavigateToAlerts}
-                  className="text-xs font-semibold text-primary group-hover:text-white transition-colors flex items-center gap-1.5 cursor-pointer"
+                  className="text-xs font-semibold text-primary hover:text-primary/90 transition-colors flex items-center gap-1.5 cursor-pointer"
                 >
-                  Configurar alertas inteligentes &rarr;
-                </button>
+                  Configurar alertas inteligentes →
+                </motion.button>
               </div>
             </div>
           )}
-        </section>
+        </motion.section>
       </div>
-
-    </div>
+    </motion.div>
   );
 });

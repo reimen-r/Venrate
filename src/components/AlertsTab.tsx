@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Bell, ChevronDown, Trash2, TrendingUp, Landmark, Sparkles, Gauge, Smartphone, CloudOff, Plus, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { Bell, ChevronDown, Trash2, TrendingUp, Landmark, Sparkles, Gauge, Smartphone, CloudOff, Plus, Check, AlertTriangle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { PriceAlert, IntelligentAlerts } from '../types';
 
 interface AlertsTabProps {
@@ -11,384 +12,284 @@ interface AlertsTabProps {
   onTriggerToast: (message: string, type: 'success' | 'info' | 'error') => void;
 }
 
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { staggerChildren: 0.08 } },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20, scale: 0.97 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { type: 'spring', stiffness: 200, damping: 22, mass: 0.6 } },
+};
+
+const currencyOptions = [
+  { id: 'bcvUsd', name: 'Dólar BCV (Banco Central)' },
+  { id: 'bcvEur', name: 'Euro BCV (Banco Central)' },
+  { id: 'binanceP2p', name: 'Binance P2P (USDT)' },
+];
+
 export const AlertsTab = React.memo<AlertsTabProps>(({
-  alerts,
-  onAddAlert,
-  onDeleteAlert,
-  intelligentAlerts,
-  onToggleIntelligentAlert,
-  onTriggerToast,
+  alerts, onAddAlert, onDeleteAlert, intelligentAlerts, onToggleIntelligentAlert, onTriggerToast,
 }) => {
   const [selectedCurrency, setSelectedCurrency] = useState<string>('bcvUsd');
   const [condition, setCondition] = useState<'greater' | 'less' | 'equal'>('greater');
   const [targetValue, setTargetValue] = useState<string>('');
-  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-
-  // Currency option list mapping IDs to descriptive names
-  const currencyOptions = [
-    { id: 'bcvUsd', name: 'Dólar BCV (Banco Central)' },
-    { id: 'bcvEur', name: 'Euro BCV (Banco Central)' },
-    { id: 'binanceP2p', name: 'Binance P2P (USDT)' },
-  ];
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const valueInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmitAlert = (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
     const value = parseFloat(targetValue);
-    
     if (isNaN(value) || value <= 0) {
-      onTriggerToast('Por favor introduce un valor objetivo válido mayor que cero', 'error');
+      setValidationError('Introduce un valor objetivo válido mayor que cero');
+      valueInputRef.current?.focus();
       return;
     }
-
     setIsSubmitting(true);
-    
-    // Simulate API delay for a polished feedback micro-interaction
     setTimeout(() => {
       const option = currencyOptions.find(o => o.id === selectedCurrency);
       const name = option ? option.name.split(' (')[0] : 'USD';
-      
       onAddAlert(selectedCurrency, name, condition, value);
       setTargetValue('');
+      setSubmitted(true);
       setIsSubmitting(false);
-    }, 800);
+      setTimeout(() => setSubmitted(false), 2000);
+      valueInputRef.current?.focus();
+    }, 600);
   };
 
+  useEffect(() => {
+    if (targetValue && validationError) setValidationError(null);
+  }, [targetValue, validationError]);
+
   return (
-    <div id="alerts-tab" className="space-y-12 animate-fade-in">
-      {/* Header Section */}
-      <section className="space-y-3">
-        <h2 className="font-sans text-3xl font-bold text-on-surface dark:text-white tracking-tight">
-          Alertas y Notificaciones
-        </h2>
-        <p className="font-sans text-sm text-on-surface-variant max-w-2xl leading-relaxed opacity-95">
+    <motion.div id="alerts-tab" className="space-y-10" variants={containerVariants} initial="hidden" animate="visible">
+      <motion.header className="space-y-2" variants={itemVariants}>
+        <p className="font-mono text-[11px] text-primary/70 uppercase tracking-[0.25em] font-semibold">Configuración de Avisos</p>
+        <h2 className="font-display text-3xl font-bold tracking-tight text-on-surface">Alertas y Notificaciones</h2>
+        <p className="font-sans text-sm text-slate-400 max-w-2xl leading-relaxed">
           Gestiona tus avisos personalizados y mantente informado sobre los movimientos más críticos del mercado cambiario en tiempo real.
         </p>
-      </section>
+      </motion.header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Form and Active Alerts (7 Columns) */}
         <div className="lg:col-span-7 space-y-6">
-          
-          {/* New Price Alert Form Card */}
-          <div className="fluid-card p-6 md:p-8 rounded-2xl">
+          <motion.div variants={itemVariants} className="glass-card rounded-3xl p-6 md:p-8">
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center border border-secondary/20">
+              <motion.div whileHover={{ scale: 1.05, rotate: 5 }}
+                className="w-12 h-12 rounded-full bg-secondary/10 flex items-center justify-center border border-secondary/20">
                 <Bell className="text-secondary w-5 h-5" />
-              </div>
+              </motion.div>
               <div>
-                <h3 className="font-sans text-lg font-bold text-on-surface dark:text-white">
-                  Nueva Alerta de Precio
-                </h3>
-                <p className="font-sans text-xs text-on-surface-variant/80">
-                  Fija avisos según rangos específicos
-                </p>
+                <h3 className="font-display text-lg font-bold text-on-surface">Nueva Alerta de Precio</h3>
+                <p className="font-sans text-[11px] text-slate-500">Fija avisos según rangos específicos</p>
               </div>
             </div>
 
             <form onSubmit={handleSubmitAlert} className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {/* Reference Currency select */}
                 <div className="space-y-1.5">
-                  <label className="block font-mono text-[10px] uppercase font-bold text-primary/70 tracking-wider ml-2">
-                    Divisa de Referencia
-                  </label>
+                  <label className="block font-mono text-[10px] uppercase font-bold text-primary/60 tracking-wider ml-2">Divisa</label>
                   <div className="relative">
                     <select
-                      id="alert-currency-select"
                       value={selectedCurrency}
                       onChange={(e) => setSelectedCurrency(e.target.value)}
-                      className="fluid-input w-full bg-surface-container-lowest/50 border border-on-surface/5 px-5 py-3 text-sm text-on-surface appearance-none focus:outline-none focus:border-primary/50 cursor-pointer"
+                      className="w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl px-5 py-3 text-sm text-slate-300 appearance-none focus:outline-none focus:border-primary/30 cursor-pointer"
                     >
-                      {currencyOptions.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.name}
-                        </option>
-                      ))}
+                      {currencyOptions.map(opt => (<option key={opt.id} value={opt.id} className="bg-[#12152a]">{opt.name}</option>))}
                     </select>
-                    <ChevronDown className="absolute right-5 top-3.5 w-4 h-4 pointer-events-none opacity-50 text-on-surface" />
+                    <ChevronDown className="absolute right-5 top-3.5 w-4 h-4 pointer-events-none text-slate-500" />
                   </div>
                 </div>
-
-                {/* Condition select */}
                 <div className="space-y-1.5">
-                  <label className="block font-mono text-[10px] uppercase font-bold text-primary/70 tracking-wider ml-2">
-                    Condición
-                  </label>
+                  <label className="block font-mono text-[10px] uppercase font-bold text-primary/60 tracking-wider ml-2">Condición</label>
                   <div className="relative">
                     <select
-                      id="alert-condition-select"
                       value={condition}
                       onChange={(e) => setCondition(e.target.value as any)}
-                      className="fluid-input w-full bg-surface-container-lowest/50 border border-on-surface/5 px-5 py-3 text-sm text-on-surface appearance-none focus:outline-none focus:border-primary/50 cursor-pointer"
+                      className="w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl px-5 py-3 text-sm text-slate-300 appearance-none focus:outline-none focus:border-primary/30 cursor-pointer"
                     >
-                      <option value="greater">Es mayor que ( &gt; )</option>
-                      <option value="less">Es menor que ( &lt; )</option>
-                      <option value="equal">Igual a ( = )</option>
+                      <option value="greater">Es mayor que (&gt;)</option>
+                      <option value="less">Es menor que (&lt;)</option>
+                      <option value="equal">Igual a (=)</option>
                     </select>
-                    <ChevronDown className="absolute right-5 top-3.5 w-4 h-4 pointer-events-none opacity-50 text-on-surface" />
+                    <ChevronDown className="absolute right-5 top-3.5 w-4 h-4 pointer-events-none text-slate-500" />
                   </div>
                 </div>
               </div>
 
-              {/* Target Value Input */}
               <div className="space-y-1.5">
-                <label className="block font-mono text-[10px] uppercase font-bold text-primary/70 tracking-wider ml-2">
-                  Valor Objetivo (VES)
-                </label>
+                <label className="block font-mono text-[10px] uppercase font-bold text-primary/60 tracking-wider ml-2">Valor Objetivo (VES)</label>
                 <div className="relative flex items-center">
                   <input
-                    id="alert-target-value-input"
-                    type="number"
-                    step="0.01"
-                    value={targetValue}
+                    ref={valueInputRef}
+                    type="number" step="0.01" value={targetValue}
                     onChange={(e) => setTargetValue(e.target.value)}
-                    placeholder="Ej: 40.00"
+                    placeholder="Ej: 700.00"
                     required
-                    className="fluid-input w-full bg-surface-container-lowest/50 border border-on-surface/5 px-5 py-3.5 text-sm text-on-surface focus:outline-none focus:border-primary/50"
+                    className={`w-full bg-white/[0.02] border rounded-2xl px-5 py-3.5 text-sm text-on-surface focus:outline-none focus:border-primary/30 transition-colors ${
+                      validationError ? 'border-tertiary/50' : 'border-white/[0.06]'
+                    }`}
                   />
-                  <span className="absolute right-6 font-mono text-[11px] font-bold text-outline/60">
-                    VES
-                  </span>
+                  <span className="absolute right-6 font-mono text-[11px] font-bold text-slate-600">VES</span>
                 </div>
+                {validationError && (
+                  <motion.p
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center gap-1.5 font-sans text-[11px] text-tertiary ml-2"
+                  >
+                    <AlertTriangle className="w-3 h-3" />
+                    {validationError}
+                  </motion.p>
+                )}
               </div>
 
-              {/* Submit Button */}
-              <button
-                id="btn-create-alert"
-                type="submit"
-                disabled={isSubmitting}
-                className={`w-full font-sans font-semibold py-4 rounded-full flex justify-center items-center gap-2 hover:brightness-110 shadow-lg transition-all active:scale-[0.98] cursor-pointer ${
-                  isSubmitting
-                    ? 'bg-secondary-container text-white cursor-wait'
-                    : 'bg-primary text-on-primary shadow-primary/20'
+              <motion.button
+                type="submit" disabled={isSubmitting}
+                whileHover={!isSubmitting ? { scale: 1.01, filter: 'brightness(1.1)' } : {}}
+                whileTap={!isSubmitting ? { scale: 0.97 } : {}}
+                className={`w-full font-sans font-semibold py-4 rounded-2xl flex justify-center items-center gap-2 shadow-lg transition-all cursor-pointer ${
+                  submitted
+                    ? 'bg-success/20 text-success/90 border border-success/30'
+                    : isSubmitting
+                      ? 'bg-secondary/20 text-secondary/90'
+                      : 'bg-gradient-to-r from-primary to-secondary text-on-surface'
                 }`}
               >
-                {isSubmitting ? (
-                  <>
-                    <Check className="w-5 h-5 animate-bounce" />
-                    Alerta Guardada
-                  </>
+                {submitted ? (
+                  <motion.span className="flex items-center gap-2" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 400, damping: 15 }}>
+                    <Check className="w-5 h-5" /> Alerta Creada
+                  </motion.span>
+                ) : isSubmitting ? (
+                  <><motion.span animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }} className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full inline-block" /> Guardando...</>
                 ) : (
-                  <>
-                    <Plus className="w-5 h-5" />
-                    Crear Alerta
-                  </>
+                  <><Plus className="w-5 h-5" /> Crear Alerta</>
                 )}
-              </button>
+              </motion.button>
             </form>
-          </div>
+          </motion.div>
 
-          {/* Active Alerts List Card */}
-          <div className="fluid-card p-6 md:p-8 rounded-2xl">
-            <h3 className="font-sans text-lg font-bold text-on-surface dark:text-white mb-5">
-              Alertas Activas
-            </h3>
-            
-            <div className="space-y-4">
+          <motion.div variants={itemVariants} className="glass-card rounded-3xl p-6 md:p-8">
+            <h3 className="font-display text-lg font-bold text-on-surface mb-5">Alertas Activas</h3>
+            <div className="space-y-3">
               {alerts.length === 0 ? (
-                <div className="text-center py-10 text-on-surface-variant/50 text-sm italic">
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-12 text-slate-600 text-xs">
                   No tienes alertas activas en este momento.
-                </div>
+                </motion.div>
               ) : (
-                alerts.map((alert) => {
-                  const conditionSymbol = alert.condition === 'greater' ? '>' : alert.condition === 'less' ? '<' : '=';
-                  return (
-                    <div
-                      key={alert.id}
-                      className="flex items-center justify-between p-5 bg-white/5 dark:bg-white/[0.03] rounded-2xl border border-on-surface/5 hover:bg-white/10 dark:hover:bg-white/[0.07] transition-all group"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className={`w-11 h-11 rounded-xl flex items-center justify-center transition-transform group-hover:scale-105 ${
-                          alert.condition === 'greater'
-                            ? 'bg-secondary/10 text-secondary'
-                            : 'bg-primary/10 text-primary'
-                        }`}>
-                          {alert.condition === 'greater' ? (
-                            <TrendingUp className="w-5 h-5" />
-                          ) : (
-                            <Landmark className="w-5 h-5" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-sans text-sm font-semibold text-on-surface dark:text-white">
-                            {alert.currencyName} {conditionSymbol} {alert.targetValue.toFixed(2)} VES
-                          </p>
-                          <p className="font-mono text-[10px] text-on-surface-variant/80">
-                            Creada: {alert.createdDate}
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        id={`btn-delete-alert-${alert.id}`}
-                        onClick={() => onDeleteAlert(alert.id)}
-                        className="text-on-surface-variant/50 hover:text-error transition-all hover:bg-error/10 p-2.5 rounded-full cursor-pointer"
-                        title="Eliminar Alerta"
+                <AnimatePresence mode="popLayout">
+                  {alerts.map((alert) => {
+                    const conditionSymbol = alert.condition === 'greater' ? '>' : alert.condition === 'less' ? '<' : '=';
+                    return (
+                      <motion.div
+                        key={alert.id}
+                        layout
+                        initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{ opacity: 0, x: -30, scale: 0.94 }}
+                        transition={{ type: 'spring', stiffness: 300, damping: 22 }}
+                        whileHover={{ scale: 1.01 }}
+                        className="flex items-center justify-between p-5 rounded-2xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors group"
                       >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  );
-                })
+                        <div className="flex items-center gap-4">
+                          <motion.div whileHover={{ scale: 1.1 }}
+                            className={`w-11 h-11 rounded-xl flex items-center justify-center ${
+                              alert.condition === 'greater' ? 'bg-secondary/10 text-secondary' : 'bg-primary/10 text-primary'
+                            }`}>
+                            {alert.condition === 'greater' ? <TrendingUp className="w-5 h-5" /> : <Landmark className="w-5 h-5" />}
+                          </motion.div>
+                          <div>
+                            <p className="font-sans text-sm font-semibold text-on-surface">
+                              {alert.currencyName} {conditionSymbol} {alert.targetValue.toFixed(2)} VES
+                            </p>
+                            <p className="font-mono text-[10px] text-slate-500">Creada: {alert.createdDate}</p>
+                          </div>
+                        </div>
+                        <motion.button
+                          whileHover={{ scale: 1.1, backgroundColor: 'rgba(251,113,133,0.1)' }}
+                          whileTap={{ scale: 0.9 }}
+                          onClick={() => onDeleteAlert(alert.id)}
+                          className="text-slate-600 hover:text-tertiary transition-all p-2 rounded-xl cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </motion.button>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
               )}
             </div>
-          </div>
+          </motion.div>
         </div>
 
-        {/* Toggles & Info (5 Columns) */}
-        <div className="lg:col-span-5 space-y-6">
-          
-          {/* Intelligent Alerts Toggles Card */}
-          <div className="fluid-card p-6 md:p-8 rounded-2xl">
-            <h3 className="font-sans text-lg font-bold text-on-surface dark:text-white mb-6 flex items-center gap-2.5">
+        <motion.div variants={itemVariants} className="lg:col-span-5 space-y-6">
+          <div className="glass-card rounded-3xl p-6 md:p-8">
+            <h3 className="font-display text-lg font-bold text-on-surface mb-6 flex items-center gap-2.5">
               <Sparkles className="text-tertiary w-5 h-5" />
               Alertas Inteligentes
             </h3>
 
             <div className="space-y-6">
-              {/* Toggle 1: Significant Fluctuations */}
-              <div className="flex items-start justify-between gap-5 border-b border-on-surface/5 pb-5">
-                <div className="flex-1 space-y-1">
-                  <p className="font-sans text-sm font-bold text-on-surface dark:text-white">
-                    Fluctuaciones Significativas
-                  </p>
-                  <p className="font-sans text-xs text-on-surface-variant/80 leading-relaxed">
-                    Notificar si hay cambios mayores al 2% en menos de 1 hora.
-                  </p>
-                </div>
-                
-                <label className="relative inline-flex items-center cursor-pointer select-none">
-                  <input
-                    id="toggle-significant-fluctuations"
-                    type="checkbox"
-                    checked={intelligentAlerts.fluctuations}
-                    onChange={() => onToggleIntelligentAlert('fluctuations')}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-on-surface/10 dark:bg-white/10 rounded-full transition-colors peer-checked:bg-secondary relative">
-                    <div className="absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full transition-all shadow-md transform peer-checked:translate-x-5"></div>
+              {([
+                { key: 'fluctuations' as keyof IntelligentAlerts, title: 'Fluctuaciones Significativas', desc: 'Notificar si hay cambios mayores al 2% en menos de 1 hora.' },
+                { key: 'dailySummary' as keyof IntelligentAlerts, title: 'Resumen Diario', desc: 'Recibe un resumen de los tipos de cambio al cierre del día (4:00 PM).' },
+                { key: 'bcvParallelGap' as keyof IntelligentAlerts, title: 'Brecha BCV vs Binance', desc: 'Avisar si la brecha entre el oficial y Binance P2P supera el 10%.' },
+              ]).map((item, idx) => (
+                <div key={item.key} className={`flex items-start justify-between gap-5 ${idx < 2 ? 'border-b border-white/[0.04] pb-5' : ''}`}>
+                  <div className="flex-1 space-y-1">
+                    <p className="font-sans text-sm font-bold text-on-surface">{item.title}</p>
+                    <p className="font-sans text-[11px] text-slate-500 leading-relaxed">{item.desc}</p>
                   </div>
-                </label>
-              </div>
-
-              {/* Toggle 2: Daily Summary */}
-              <div className="flex items-start justify-between gap-5 border-b border-on-surface/5 pb-5">
-                <div className="flex-1 space-y-1">
-                  <p className="font-sans text-sm font-bold text-on-surface dark:text-white">
-                    Resumen Diario
-                  </p>
-                  <p className="font-sans text-xs text-on-surface-variant/80 leading-relaxed">
-                    Recibe un resumen de los tipos de cambio al cierre del día (4:00 PM).
-                  </p>
+                  <label className="relative inline-flex items-center cursor-pointer select-none shrink-0">
+                    <input
+                      type="checkbox" checked={intelligentAlerts[item.key]}
+                      onChange={() => onToggleIntelligentAlert(item.key)}
+                      className="sr-only peer"
+                    />
+                    <motion.div
+                      className="w-10 h-5 rounded-full bg-white/[0.08] transition-colors peer-checked:bg-secondary/60 flex items-center px-0.5"
+                      animate={{ backgroundColor: intelligentAlerts[item.key] ? 'rgba(139,92,246,0.6)' : 'rgba(255,255,255,0.08)' }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                    >
+                      <motion.div
+                        className="w-4 h-4 bg-white rounded-full shadow-md"
+                        animate={{ x: intelligentAlerts[item.key] ? 18 : 0 }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 28, mass: 0.6 }}
+                      />
+                    </motion.div>
+                  </label>
                 </div>
-
-                <label className="relative inline-flex items-center cursor-pointer select-none">
-                  <input
-                    id="toggle-daily-summary"
-                    type="checkbox"
-                    checked={intelligentAlerts.dailySummary}
-                    onChange={() => onToggleIntelligentAlert('dailySummary')}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-on-surface/10 dark:bg-white/10 rounded-full transition-colors peer-checked:bg-secondary relative">
-                    <div className="absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full transition-all shadow-md transform peer-checked:translate-x-5"></div>
-                  </div>
-                </label>
-              </div>
-
-              {/* Toggle 3: BCV vs Binance Gap */}
-              <div className="flex items-start justify-between gap-5">
-                <div className="flex-1 space-y-1">
-                  <p className="font-sans text-sm font-bold text-on-surface dark:text-white">
-                    Brecha BCV vs Binance
-                  </p>
-                  <p className="font-sans text-xs text-on-surface-variant/80 leading-relaxed">
-                    Avisar si la brecha entre el oficial y Binance P2P supera el 10%.
-                  </p>
-                </div>
-
-                <label className="relative inline-flex items-center cursor-pointer select-none">
-                  <input
-                    id="toggle-bcv-parallel-gap"
-                    type="checkbox"
-                    checked={intelligentAlerts.bcvParallelGap}
-                    onChange={() => onToggleIntelligentAlert('bcvParallelGap')}
-                    className="sr-only peer"
-                  />
-                  <div className="w-11 h-6 bg-on-surface/10 dark:bg-white/10 rounded-full transition-colors peer-checked:bg-secondary relative">
-                    <div className="absolute top-[2px] left-[2px] w-5 h-5 bg-white rounded-full transition-all shadow-md transform peer-checked:translate-x-5"></div>
-                  </div>
-                </label>
-              </div>
+              ))}
             </div>
           </div>
 
-          {/* Info Card: How they work? */}
-          <div className="fluid-card p-6 md:p-8 rounded-2xl overflow-hidden relative">
-            <div className="absolute -right-12 -bottom-12 w-48 h-48 bg-secondary/5 rounded-full blur-[80px]"></div>
-            <h3 className="font-sans text-lg font-bold text-on-surface dark:text-white mb-5">
-              ¿Cómo funcionan?
-            </h3>
-            
+          <div className="glass-card rounded-3xl p-6 md:p-8 overflow-hidden relative">
+            <div className="absolute -right-10 -bottom-10 w-36 h-36 rounded-full bg-secondary/8 blur-[80px] pointer-events-none" />
+            <h3 className="font-display text-lg font-bold text-on-surface mb-5 relative z-10">¿Cómo funcionan?</h3>
             <div className="space-y-5 relative z-10">
-              <div className="flex gap-4">
-                <div className="w-10 h-10 rounded-full bg-secondary/5 flex items-center justify-center shrink-0 border border-secondary/10">
-                  <Gauge className="text-secondary w-4.5 h-4.5" />
-                </div>
-                <div className="space-y-0.5">
-                  <strong className="text-on-surface dark:text-white block text-sm font-bold">Tiempo Real</strong>
-                  <p className="font-sans text-xs text-on-surface-variant/80 leading-relaxed">
-                    Alertas procesadas en milisegundos tras cada actualización oficial de entes bancarios y portales P2P.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="w-10 h-10 rounded-full bg-secondary/5 flex items-center justify-center shrink-0 border border-secondary/10">
-                  <Smartphone className="text-secondary w-4.5 h-4.5" />
-                </div>
-                <div className="space-y-0.5">
-                  <strong className="text-on-surface dark:text-white block text-sm font-bold">Multi-dispositivo</strong>
-                  <p className="font-sans text-xs text-on-surface-variant/80 leading-relaxed">
-                    Sincronización instantánea en la nube entre tu móvil, tableta, extensión y navegador web.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="w-10 h-10 rounded-full bg-secondary/5 flex items-center justify-center shrink-0 border border-secondary/10">
-                  <CloudOff className="text-secondary w-4.5 h-4.5" />
-                </div>
-                <div className="space-y-0.5">
-                  <strong className="text-on-surface dark:text-white block text-sm font-bold">Optimización</strong>
-                  <p className="font-sans text-xs text-on-surface-variant/80 leading-relaxed">
-                    Protocolos de bajo consumo diseñados específicamente para conexiones a redes móviles lentas o inestables.
-                  </p>
-                </div>
-              </div>
+              {[
+                { icon: Gauge, title: 'Tiempo Real', desc: 'Alertas procesadas en milisegundos tras cada actualización oficial de entes bancarios y portales P2P.' },
+                { icon: Smartphone, title: 'Multi-dispositivo', desc: 'Sincronización instantánea en la nube entre tu móvil, tableta y navegador web.' },
+                { icon: CloudOff, title: 'Optimización', desc: 'Protocolos de bajo consumo diseñados para conexiones a redes móviles lentas o inestables.' },
+              ].map((info, i) => (
+                <motion.div key={i} className="flex gap-4" whileHover={{ x: 3 }} transition={{ type: 'spring', stiffness: 300, damping: 20 }}>
+                  <div className="w-10 h-10 rounded-full bg-secondary/10 flex items-center justify-center shrink-0 border border-secondary/15">
+                    <info.icon className="text-secondary w-4.5 h-4.5" />
+                  </div>
+                  <div className="space-y-0.5">
+                    <strong className="text-on-surface block text-sm font-bold">{info.title}</strong>
+                    <p className="font-sans text-[11px] text-slate-500 leading-relaxed">{info.desc}</p>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </div>
-
-          {/* Server Status Graphic Card */}
-          <div className="rounded-2xl overflow-hidden h-40 relative group border border-on-surface/5">
-            <div className="absolute inset-0 bg-gradient-to-t from-background via-background/40 to-transparent z-10"></div>
-            
-            <div className="absolute bottom-5 left-5 z-20 space-y-1">
-              <span className="inline-flex items-center px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-secondary text-[9px] font-bold uppercase tracking-widest border border-white/10">
-                Estado del Servidor
-              </span>
-              <p className="font-sans text-base text-white font-bold tracking-tight">
-                Sistemas Operativos Operando (99.9%)
-              </p>
-            </div>
-            
-            <div 
-              className="bg-cover bg-center w-full h-full transform group-hover:scale-105 transition-transform duration-[4000ms]" 
-              style={{ backgroundImage: "url('https://lh3.googleusercontent.com/aida-public/AB6AXuBWzfzKAxIUgQgJuZbeWYlR-h1NTb6HRcEGYZ4rltoc0kRs1yEeExkpTKnB3A5NRAY8LjWz2dWmCJscJtGaygJJ8Sa8QiEQS4speCECIk9sS_ncD1XH7_iM4hz-jrvg-_OL5v1ME6rzwjuNAo87EIo0FJMI90TbJ6Dg816Ev6PKuYsUiJZLp0m4M5tpUqdvhlLtzI5TB1SCGpOZJMkCm3BJgW0_TQ8OkCtTz0JopmdO2VoLvo6AcLSRFw')" }}
-            ></div>
-          </div>
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 });
