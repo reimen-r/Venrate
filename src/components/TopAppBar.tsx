@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, Share2, RefreshCw } from 'lucide-react';
+import { Share2, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface TopAppBarProps {
@@ -38,11 +38,20 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({ onShare, isFetching, onRef
             className="w-10 h-10 rounded-xl flex items-center justify-center border border-primary/30 bg-gradient-to-br from-primary/10 to-secondary/10"
             style={{ boxShadow: '0 0 24px rgba(34,211,238,0.12)' }}
           >
-            <Activity className="text-primary w-5 h-5" />
+            <svg viewBox="0 0 100 100" className="w-5 h-5" fill="none">
+              <defs>
+                <linearGradient id="vGradHeader" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stopColor="#00D9FF" />
+                  <stop offset="50%" stopColor="#8B5CF6" />
+                  <stop offset="100%" stopColor="#FF00E5" />
+                </linearGradient>
+              </defs>
+              <path d="M 28 22 L 50 65 L 72 22" stroke="url(#vGradHeader)" strokeWidth="12" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </motion.div>
           <div>
-            <h1 className="font-display text-lg font-bold tracking-tight text-[#eaecfa]">
-              VeneRate
+            <h1 className="font-display text-lg font-bold tracking-tight text-on-surface">
+              Venrate
             </h1>
             <div className="flex items-center gap-1.5">
               <span className="relative flex h-1.5 w-1.5">

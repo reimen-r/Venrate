@@ -36,6 +36,6 @@
   <line x1="200" y1="105" x2="200" y2="50" stroke="#E8E8FF" stroke-width="3" stroke-linecap="round" opacity="0.6"/>
   <polyline points="193,57 200,50 207,57" fill="none" stroke="#E8E8FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
 
-  <!-- VeneRate text -->
-  <text x="200" y="170" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="34" font-weight="700" fill="#E8E8FF" letter-spacing="2">VeneRate</text>
+  <!-- Venrate text -->
+  <text x="200" y="170" text-anchor="middle" font-family="Inter, system-ui, -apple-system, sans-serif" font-size="34" font-weight="700" fill="#E8E8FF" letter-spacing="2">Venrate</text>
 </svg>

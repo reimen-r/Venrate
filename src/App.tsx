@@ -68,6 +68,14 @@ export default function App() {
     return saved ? JSON.parse(saved) : false;
   });
 
+  const [widgetRateIds, setWidgetRateIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('venrate-widgets');
+      const parsed = saved ? JSON.parse(saved) : ['bcvUsd', 'bcvEur', 'binanceP2p'];
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed : ['bcvUsd', 'bcvEur', 'binanceP2p'];
+    } catch { return ['bcvUsd', 'bcvEur', 'binanceP2p']; }
+  });
+
   const [initialLoadComplete, setInitialLoadComplete] = useState<boolean>(false);
   const isInitialLoading = !initialLoadComplete && lastFetched === null && isFetching;
   const [isOffline, setIsOffline] = useState<boolean>(!navigator.onLine);
@@ -176,7 +184,7 @@ export default function App() {
             const symbol = alert.condition === 'greater' ? '>' : alert.condition === 'less' ? '<' : '=';
             const msg = `¡Alerta Disparada! ${alert.currencyName} alcanzó ${newItem.rate.toFixed(2)} VES (Límite: ${symbol} ${alert.targetValue.toFixed(2)})`;
             triggerToast(msg, 'alert_triggered');
-            sendNativeNotification('VeneRate - Alerta de Precio', msg);
+            sendNativeNotification('Venrate - Alerta de Precio', msg);
             vibrateOnAlert();
           }
         }
@@ -229,6 +237,25 @@ export default function App() {
     });
   }, [triggerToast]);
 
+  const handleToggleWidgetRate = useCallback((rateId: string) => {
+    setWidgetRateIds(prev => {
+      if (prev.includes(rateId)) {
+        if (prev.length <= 1) {
+          triggerToast('Debes mantener al menos una tasa en pantalla', 'error');
+          return prev;
+        }
+        const next = prev.filter(id => id !== rateId);
+        localStorage.setItem('venrate-widgets', JSON.stringify(next));
+        triggerToast('Widget de tasa ocultado', 'info');
+        return next;
+      }
+      const next = [...prev, rateId];
+      localStorage.setItem('venrate-widgets', JSON.stringify(next));
+      triggerToast('Widget de tasa agregado al inicio', 'success');
+      return next;
+    });
+  }, [triggerToast]);
+
   const handleResetApp = useCallback(() => {
     setAlerts(INITIAL_ALERTS);
     setIntelligentAlerts({ fluctuations: true, dailySummary: true, bcvParallelGap: false });
@@ -238,7 +265,7 @@ export default function App() {
 
   const handleShareApp = useCallback(() => {
     if (navigator.share) {
-      navigator.share({ title: 'VeneRate - Monitor de Divisas', text: 'Sigue el tipo de cambio oficial del BCV y Binance P2P en tiempo real. Calculadora, alertas y spread cambiario.', url: window.location.href })
+      navigator.share({ title: 'Venrate - Monitor de Divisas', text: 'Sigue el tipo de cambio oficial del BCV y Binance P2P en tiempo real. Calculadora, alertas y spread cambiario.', url: window.location.href })
         .catch(() => triggerToast('Enlace copiado al portapapeles', 'success'));
     } else {
       navigator.clipboard.writeText(window.location.href);
@@ -279,7 +306,8 @@ export default function App() {
               {activeTab === 'dashboard' && (
                 <DashboardTab rates={displayedRates} onTriggerToast={triggerToast} onNavigateToAlerts={() => setActiveTab('alerts')}
                   isFetching={isFetching} onRefresh={() => updateRatesFromApi(true)} lastFetched={lastFetched}
-                  isCompactView={isCompactView} isEqualizedToBcv={isEqualizedToBcv} isInitialLoading={isInitialLoading} isOffline={isOffline} />
+                  isEqualizedToBcv={isEqualizedToBcv} isInitialLoading={isInitialLoading} isOffline={isOffline}
+                  widgetRateIds={widgetRateIds} />
               )}
               {activeTab === 'history' && (
                 <HistoryTab onTriggerToast={triggerToast} rates={displayedRates} isEqualizedToBcv={isEqualizedToBcv} />
@@ -292,7 +320,8 @@ export default function App() {
                 <SettingsTab isDarkMode={isDarkMode} onToggleDarkMode={handleToggleDarkMode}
                   isCompactView={isCompactView} onToggleCompactView={handleToggleCompactView}
                   isEqualizedToBcv={isEqualizedToBcv} onToggleEqualizedToBcv={handleToggleEqualizedToBcv}
-                  rates={displayedRates} onTriggerToast={triggerToast} onResetApp={handleResetApp} />
+                  rates={displayedRates} onTriggerToast={triggerToast} onResetApp={handleResetApp}
+                  widgetRateIds={widgetRateIds} onToggleWidgetRate={handleToggleWidgetRate} />
               )}
             </motion.div>
           </Suspense>

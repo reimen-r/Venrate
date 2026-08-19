@@ -1,6 +1,6 @@
 {
-  "name": "VeneRate - Monitor de Divisas",
-  "short_name": "VeneRate",
+  "name": "Venrate - Monitor de Divisas",
+  "short_name": "Venrate",
   "description": "Tasas BCV, Euro y Binance P2P en tiempo real con calculadora y alertas inteligentes.",
   "id": "/",
   "start_url": "/",

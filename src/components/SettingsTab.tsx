@@ -14,6 +14,8 @@ interface SettingsTabProps {
   rates: ExchangeRate[];
   onTriggerToast: (message: string, type: 'success' | 'info' | 'error') => void;
   onResetApp: () => void;
+  widgetRateIds: string[];
+  onToggleWidgetRate: (rateId: string) => void;
 }
 
 const containerVariants = {
@@ -29,12 +31,12 @@ const itemVariants = {
 export const SettingsTab = React.memo<SettingsTabProps>(({
   isDarkMode, onToggleDarkMode, isCompactView, onToggleCompactView,
   isEqualizedToBcv, onToggleEqualizedToBcv, rates, onTriggerToast, onResetApp,
+  widgetRateIds, onToggleWidgetRate,
 }) => {
   const [syncTime, setSyncTime] = useState('Hace 2 minutos');
   const [isSyncing, setIsSyncing] = useState(false);
   const [showPersonalizeModal, setShowPersonalizeModal] = useState(false);
   const [notifPerm, setNotifPerm] = useState<NotificationPermission>(() => getNotificationPermission());
-  const [selectedWidgetRates, setSelectedWidgetRates] = useState<string[]>(['bcvUsd', 'bcvEur', 'binanceP2p']);
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -49,18 +51,8 @@ export const SettingsTab = React.memo<SettingsTabProps>(({
 
   const handleManualSync = () => {
     setIsSyncing(true);
-    onTriggerToast('Estableciendo conexión segura con VeneRate Cloud...', 'info');
+    onTriggerToast('Estableciendo conexión segura con Venrate Cloud...', 'info');
     setTimeout(() => { setSyncTime('Hace un momento'); setIsSyncing(false); onTriggerToast('Sincronización completada con éxito', 'success'); }, 1500);
-  };
-
-  const handleToggleWidgetRate = (rateId: string) => {
-    if (selectedWidgetRates.includes(rateId)) {
-      if (selectedWidgetRates.length <= 1) { onTriggerToast('Debes mantener al menos una tasa en pantalla', 'error'); return; }
-      setSelectedWidgetRates(p => p.filter(id => id !== rateId));
-    } else {
-      setSelectedWidgetRates(p => [...p, rateId]);
-    }
-    onTriggerToast('Configuración de visualización modificada', 'success');
   };
 
   const handleNotificationRequest = async () => {
@@ -165,24 +157,6 @@ export const SettingsTab = React.memo<SettingsTabProps>(({
       <motion.div variants={itemVariants} className="glass-card rounded-2xl overflow-hidden divide-y divide-white/[0.04]">
         <motion.button
           whileHover={{ backgroundColor: 'rgba(255,255,255,0.02)' }}
-          onClick={() => onTriggerToast('VeneRate Premium Activo: Licencia Enterprise concedida', 'success')}
-          className="w-full p-5 flex items-center justify-between group cursor-pointer text-left"
-        >
-          <div className="flex items-center gap-4">
-            <div className="w-11 h-11 rounded-full overflow-hidden border-2 border-primary/20 shadow-lg shrink-0">
-              <img alt="Avatar" loading="lazy" className="w-full h-full object-cover" referrerPolicy="no-referrer"
-                src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXoIac5JUko8NRGdL6exVbiUpTDnAKR8Vui3KWkmlQZGwesXEJXeDd5bR_N0438hwBwqruPl7ymOxSxi9hgRfdICWGimmmTCvSNcaiKxl7ARtrbV8P2RI6hZXbi-Tfnrllbq4vQM2ErRMA3speoJtJ8vxPPaGcnFx18AeUpGHiKTNHzF-dNcnb4nVa8VQEJZiCdDpYN8urzJSTRUxht_PJFnT2Y___W_niacu1TQthNzS8y7n_nz4Ngg" />
-            </div>
-            <div>
-              <h3 className="font-sans text-sm font-bold text-on-surface">Cuenta</h3>
-              <p className="font-mono text-[10px] text-slate-500">Premium · ID: 8824</p>
-            </div>
-          </div>
-          <ChevronRight className="w-4 h-4 text-slate-600 group-hover:translate-x-1 transition-transform" />
-        </motion.button>
-
-        <motion.button
-          whileHover={{ backgroundColor: 'rgba(255,255,255,0.02)' }}
           onClick={handleManualSync}
           disabled={isSyncing}
           className="w-full p-5 flex items-center justify-between group cursor-pointer text-left"
@@ -230,7 +204,7 @@ export const SettingsTab = React.memo<SettingsTabProps>(({
       </motion.div>
 
       <motion.footer variants={itemVariants} className="text-center space-y-1 pb-20">
-        <p className="font-mono text-xs text-slate-600 font-semibold">VeneRate <span className="text-primary">v4.2.0</span></p>
+        <p className="font-mono text-xs text-slate-600 font-semibold">Venrate <span className="text-primary">v4.2.0</span></p>
         <p className="font-mono text-[9px] text-slate-700 uppercase tracking-[0.2em] font-bold">
           <span className="bg-gradient-to-r from-cyan-400 via-violet-400 to-rose-400 bg-clip-text text-transparent">Enterprise Edition</span>
         </p>
@@ -258,12 +232,12 @@ export const SettingsTab = React.memo<SettingsTabProps>(({
               </div>
               <div className="space-y-2.5">
                 {rates.map(rate => {
-                  const isChecked = selectedWidgetRates.includes(rate.id);
+                  const isChecked = widgetRateIds.includes(rate.id);
                   return (
                     <motion.div
                       key={rate.id}
                       whileTap={{ scale: 0.98 }}
-                      onClick={() => handleToggleWidgetRate(rate.id)}
+                      onClick={() => onToggleWidgetRate(rate.id)}
                       className={`flex items-center justify-between p-3.5 rounded-xl cursor-pointer border transition-colors ${
                         isChecked ? 'bg-primary/10 border-primary/20' : 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.04]'
                       }`}

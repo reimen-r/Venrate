@@ -36,13 +36,21 @@ async function startServer() {
 
   const CACHE_TTL = 300000; // 5 minutes cache (rates don't change frequently)
 
-  // Base realistic rates in Venezuela for mid-2026
+  // Base realistic rates in Venezuela (updated for 2026)
   const BASE_RATES = {
-    bcvUsd: 685.94,
-    bcvEur: 783.78,
-    paralelo: 807.28,
-    binance: 817.00
+    bcvUsd: 773.31,
+    bcvEur: 896.03,
+    paralelo: 900.00,
+    binance: 921.46
   };
+
+  // Valid plausible range for a VES exchange rate (rejects corrupt scrape values like 68)
+  const MIN_PLAUSIBLE_RATE = 500;
+  const MAX_PLAUSIBLE_RATE = 1500;
+
+  // Validates a scraped/fetched rate is within a plausible range
+  const isPlausible = (value: number | null | undefined): value is number =>
+    typeof value === 'number' && isFinite(value) && value >= MIN_PLAUSIBLE_RATE && value <= MAX_PLAUSIBLE_RATE;
 
   // Helper to generate a realistic dynamic walk for fallback
   const getRealisticFallbackData = () => {
@@ -93,67 +101,19 @@ async function startServer() {
 
   async function fetchRates(): Promise<{ main: any; bcv: any; isFallback: boolean }> {
     try {
-      // Try scraping live Venezuelan rates directly from major reference portals first
       let bcvUsd: number | null = null;
       let bcvEur: number | null = null;
       let paralelo: number | null = null;
       let binance: number | null = null;
 
+      // 1. Primary source: er-api official USD/EUR -> VES (reliable and up-to-date)
       try {
-        const headers = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        };
-
-        const monitorPromise = fetch('https://monitordedivisavenezuela.com', { headers, signal: AbortSignal.timeout(6000) })
-          .then(r => r.text())
-          .catch(() => null);
-
-        const usdtPromise = fetch('https://usdt.com.ve', { headers, signal: AbortSignal.timeout(6000) })
-          .then(r => r.text())
-          .catch(() => null);
-
-        const [monitorHtml, usdtHtml] = await Promise.all([monitorPromise, usdtPromise]);
-
-        if (monitorHtml) {
-          // Parse the live data array with escaped JSON keys:
-          const itemRegex = /\\"bcv\\"\s*:\s*([\d.]+)\s*,\s*\\"euro\\"\s*:\s*([\d.]+)\s*,\s*\\"parallel\\"\s*:\s*([\d.]+)\s*,\s*\\"date\\"\s*:\s*\\"([\d\-T:\.Z]+)\\"/g;
-          let lastItem = null;
-          let match;
-          while ((match = itemRegex.exec(monitorHtml)) !== null) {
-            lastItem = {
-              bcv: parseFloat(match[1]),
-              euro: parseFloat(match[2]),
-              parallel: parseFloat(match[3])
-            };
-          }
-          if (lastItem) {
-            bcvUsd = lastItem.bcv;
-            bcvEur = lastItem.euro;
-            paralelo = lastItem.parallel;
-            console.log("Successfully scraped Monitor de Divisas:", lastItem);
-          }
-        }
-
-        if (usdtHtml) {
-          const usdtMatch = usdtHtml.match(/\\"usdtRate\\"\s*:\s*([\d.]+)/);
-          if (usdtMatch) {
-            binance = parseFloat(usdtMatch[1]);
-            console.log("Successfully scraped Binance P2P rate:", binance);
-          }
-        }
-      } catch (scrapeErr: any) {
-        console.error("Scraping live monitors failed, using global er-api instead:", scrapeErr.message || scrapeErr);
-      }
-
-      // If scraping failed or returned incomplete data, fallback to er-api with high-precision spreads
-      if (!bcvUsd || !bcvEur) {
-        console.log("Some scraped values missing, fetching from open.er-api.com...");
         const usdPromise = fetch('https://open.er-api.com/v6/latest/USD')
           .then(async (r) => {
             if (!r.ok) throw new Error(`Status: ${r.status}`);
             const data = await r.json();
             const ves = data?.rates?.VES;
-            if (!ves) throw new Error("No VES rate found in USD response");
+            if (!isPlausible(ves)) throw new Error("No plausible VES rate found in USD response");
             return parseFloat(ves.toFixed(2));
           })
           .catch(err => {
@@ -166,7 +126,7 @@ async function startServer() {
             if (!r.ok) throw new Error(`Status: ${r.status}`);
             const data = await r.json();
             const ves = data?.rates?.VES;
-            if (!ves) throw new Error("No VES rate found in EUR response");
+            if (!isPlausible(ves)) throw new Error("No plausible VES rate found in EUR response");
             return parseFloat(ves.toFixed(2));
           })
           .catch(err => {
@@ -175,12 +135,68 @@ async function startServer() {
           });
 
         const [apiUsd, apiEur] = await Promise.all([usdPromise, eurPromise]);
-        
-        if (apiUsd) bcvUsd = apiUsd;
-        if (apiEur) bcvEur = apiEur;
+        if (isPlausible(apiUsd)) bcvUsd = apiUsd;
+        if (isPlausible(apiEur)) bcvEur = apiEur;
+        if (bcvUsd) console.log("er-api USD/VES:", bcvUsd);
+        if (bcvEur) console.log("er-api EUR/VES:", bcvEur);
+      } catch (err: any) {
+        console.error("er-api fetch failed:", err.message || err);
       }
 
-      // Final fallback if both scrape and er-api failed completely
+      // 2. Secondary source: Binance P2P from usdt.com.ve (with plausibility check)
+      try {
+        const usdtHtml = await fetch('https://usdt.com.ve', {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+          signal: AbortSignal.timeout(6000)
+        }).then(r => r.text()).catch(() => null);
+
+        if (usdtHtml) {
+          const usdtMatch = usdtHtml.match(/\\"usdtRate\\"\s*:\s*([\d.]+)/);
+          if (usdtMatch) {
+            const raw = parseFloat(usdtMatch[1]);
+            if (isPlausible(raw)) {
+              binance = raw;
+              console.log("Successfully scraped Binance P2P rate:", binance);
+            }
+          }
+        }
+      } catch (scrapeErr: any) {
+        console.error("Binance P2P scrape failed:", scrapeErr.message || scrapeErr);
+      }
+
+      // 3. Complementary source: monitor scrape for parallel rate only (validated)
+      try {
+        const monitorHtml = await fetch('https://monitordedivisavenezuela.com', {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+          signal: AbortSignal.timeout(6000)
+        }).then(r => r.text()).catch(() => null);
+
+        if (monitorHtml) {
+          const itemRegex = /\\"bcv\\"\s*:\s*([\d.]+)\s*,\s*\\"euro\\"\s*:\s*([\d.]+)\s*,\s*\\"parallel\\"\s*:\s*([\d.]+)/g;
+          let lastItem: { bcv: number; euro: number; parallel: number } | null = null;
+          let match;
+          while ((match = itemRegex.exec(monitorHtml)) !== null) {
+            const bcv = parseFloat(match[1]);
+            const euro = parseFloat(match[2]);
+            const parallel = parseFloat(match[3]);
+            // Only accept plausible values (the site sometimes emits corrupt 10x-smaller numbers)
+            if (isPlausible(bcv) && isPlausible(euro) && isPlausible(parallel)) {
+              lastItem = { bcv, euro, parallel };
+            }
+          }
+          if (lastItem) {
+            // Monitor is a secondary source: only fill values not already provided by er-api
+            if (!bcvUsd) bcvUsd = lastItem.bcv;
+            if (!bcvEur) bcvEur = lastItem.euro;
+            if (isPlausible(lastItem.parallel)) paralelo = lastItem.parallel;
+            console.log("Monitor scrape provided rates:", lastItem);
+          }
+        }
+      } catch (scrapeErr: any) {
+        console.error("Monitor scrape failed:", scrapeErr.message || scrapeErr);
+      }
+
+      // 4. Final fallback if all sources failed
       if (!bcvUsd || !bcvEur) {
         if (cache) {
           console.log("All live fetches failed, returning cached data...");
@@ -192,7 +208,7 @@ async function startServer() {
         }
       }
 
-      // Complete missing rates using the current exact real-world market margins:
+      // Complete missing rates using real-world market margins
       if (!paralelo) {
         paralelo = parseFloat((bcvUsd * 1.1769).toFixed(2));
       }

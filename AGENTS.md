@@ -5,22 +5,31 @@
 - Express backend (API + serving SPA)
 - Deployed on Railway: https://venrate-production.up.railway.app
 - Animation library: `motion` v12 (import from `motion/react`)
+- `@headlessui/react` Listbox for the currency converter dropdowns (`CurrencySelect.tsx`)
+- `html-to-image` (`toPng`) for generating the shareable conversion card
 
 ## Commands
 | Command | Purpose |
 |---------|---------|
 | `npm run dev` | Dev server (tsx server.ts → Express + Vite middleware) |
-| `npm run build` | Vite build + esbuild server.ts |
+| `npm run build` | Vite build + esbuild server.ts → dist/ |
 | `npm run start` | Production server (node dist/server.cjs) |
 | `npm run lint` | TS type check (tsc --noEmit) |
-| `npm run clean` | Remove dist/ |
+| `npm run clean` | Remove dist/ (Unix only — uses `rm -rf`; on Windows use `Remove-Item -Recurse -Force dist`) |
+
+Always verify changes with `npm run lint && npm run build`. No test framework exists.
 
 ## Architecture
-- **Backend**: Express serves SPA from `dist/` + `/api/rates` endpoint. 5-min in-memory cache, 30 req/min rate limit, Helmet CSP disabled.
+- **Backend**: Express serves SPA from `dist/` + `/api/rates` endpoint. 5-min in-memory cache (`CACHE_TTL = 300000`), 30 req/min rate limit, Helmet CSP disabled.
 - **PWA**: vite-plugin-pwa with autoUpdate; workbox precaches all assets + NetworkFirst for `/api/`
 - **Code Splitting**: `React.lazy()` for all tabs. Named exports require the `.then(m => ({ default: m.X }))` wrapper.
 - **Error Boundary**: `react-error-boundary` wraps `<App />` in `main.tsx`
 - **File tree**: `src/App.tsx` (state hub), `src/components/` (tabs + shared), `src/lib/notifications.ts` (native browser notifications), `src/constants.ts`, `src/types.ts`
+
+## Rate Fetching (server.ts) — hard-earned
+- **er-api is the PRIMARY source** for BCV USD/EUR (reliable). Monitor scraping (`monitordedivisavenezuela.com`) is only a *secondary* filler and Binance P2P comes from `usdt.com.ve`.
+- **Plausibility guard**: `isPlausible()` rejects any rate outside 500–1500 VES. This exists because the monitor scrape sometimes returns corrupt 10x-smaller values (e.g. `68` instead of `773`) that previously overwrote good data and showed wrong amounts in the UI.
+- When changing rate sources, keep er-api first and never let scraped values override valid er-api data.
 
 ## Design System (Aurora Night)
 - **Theme tokens** use Tailwind 4 `@theme` CSS variables. Always use semantic classes:
@@ -47,12 +56,15 @@
 | `venrate-intelligent-alerts` | `IntelligentAlerts` | Load on mount, save on every change |
 | `isCompactView` | boolean | Already persisted |
 | `isEqualizedToBcv` | boolean | Already persisted |
+| `venrate-widgets` | `string[]` (rate ids) | Lifted to `App.tsx`, saved on toggle |
 
 Reset via Settings → "Reiniciar Alertas por Defecto" (sets defaults, persistence effect re-saves them).
 
 ## Components with Quirks
 - **`AnimatedNumber`**: Spring count-up using `motion/react` `useMotionValue` + `useSpring` + `useTransform`. Requires `value` prop to change for re-animation.
-- **`DashboardTab`**: Calculator swap button rotates 180° (spring). Hero rate flashes green/red on API update (ref comparison). Spread gauge bar animates via `motion.div left` with spring.
+- **`DashboardTab`**: Calculator swap button rotates 180° (spring). Hero rate flashes green/red on API update (ref comparison). Spread gauge bar animates via `motion.div left` with spring. Home rates are filtered by the `widgetRateIds` prop (the widgets selected in Settings).
+- **`CurrencySelect`**: `@headlessui/react` Listbox replacing native `<select>` (native `<option>` cannot render images). Currency icons are emoji flags (`🇺🇸🇪🇺🇻🇪`) + a green `₮` badge for USDT. Use `transition` on `Listbox.Options` (NOT `AnimatePresence` + `static` — that combination leaves the dropdown stuck open).
+- **`ShareableConversionCard`**: Rendered as a `forwardRef` div, captured with `html-to-image` `toPng` via a `useRef` in `DashboardTab`, then shared through the Web Share API (falls back to download).
 - **`HistoryTab`**: Chart uses Recharts `AreaChart`. Mock data scaled to live rates via ratio. `animationDuration` per series for staggered draw.
 - **`AlertsTab`**: Form disables button during `isSubmitting` and `submitted` states (2s cooldown). Validation error shows inline `motion.p`.
 - **`BottomNavBar`**: Floating pill container (`glass-strong rounded-3xl`). Active indicator uses `layoutId="nav-pill"` (spring stiffness 380, damping 28).
@@ -79,3 +91,7 @@ Never use hardcoded `text-white` or `text-[#eaecfa]`. Use `text-on-surface`. Nev
 
 ### No Test Framework
 Verify changes with `npm run lint && npm run build` then manual browser check.
+
+### Windows Development
+- `npm run clean` uses `rm -rf` (Unix only). On Windows PowerShell, run instead: `Remove-Item -Recurse -Force dist`
+- The glob/grep tools may fail if `.zip` files exist in the repo (they try to auto-expand them). Delete any stray zip files.

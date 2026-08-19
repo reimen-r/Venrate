@@ -1,10 +1,13 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { ArrowUpDown, Calculator, TrendingDown, TrendingUp, AlertCircle, Share2, Activity, Scale } from 'lucide-react';
+import { ArrowUpDown, Calculator, TrendingDown, TrendingUp, AlertCircle, Share2, Activity, Scale, ImageIcon, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { toPng } from 'html-to-image';
 import { ExchangeRate } from '../types';
 import { AnimatedNumber } from './AnimatedNumber';
 import { SkeletonCard, SkeletonListRow } from './SkeletonCard';
 import { SPREAD_HEALTHY_THRESHOLD, SPREAD_MODERATE_THRESHOLD, SPREAD_MAX_SCALE } from '../constants';
+import { ShareableConversionCard } from './ShareableConversionCard';
+import { CurrencySelect } from './CurrencySelect';
 
 export const CALCULATOR_CURRENCIES = [
   { id: 'VES', name: 'Bolívares (VES)', code: 'VES', getRate: () => 1 },
@@ -20,10 +23,10 @@ interface DashboardTabProps {
   isFetching: boolean;
   onRefresh: () => void;
   lastFetched: Date | null;
-  isCompactView: boolean;
   isEqualizedToBcv?: boolean;
   isInitialLoading?: boolean;
   isOffline?: boolean;
+  widgetRateIds: string[];
 }
 
 const containerVariants = {
@@ -57,16 +60,20 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
   isFetching,
   onRefresh,
   lastFetched,
-  isCompactView,
   isEqualizedToBcv = false,
   isInitialLoading = false,
   isOffline = false,
+  widgetRateIds,
 }) => {
   const [fromCurrency, setFromCurrency] = useState<string>('USD_B');
   const [toCurrency, setToCurrency] = useState<string>('VES');
   const [calcAmount, setCalcAmount] = useState<number>(1);
   const [rightPanelTab, setRightPanelTab] = useState<'spread' | 'forecast'>('spread');
   const [swapped, setSwapped] = useState(false);
+  const [shareNote, setShareNote] = useState<string>('');
+  const [showShareModal, setShowShareModal] = useState<boolean>(false);
+  const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
+  const shareCardRef = useRef<HTMLDivElement>(null);
 
   const fromObj = CALCULATOR_CURRENCIES.find(c => c.id === fromCurrency) || CALCULATOR_CURRENCIES[1];
   const toObj = CALCULATOR_CURRENCIES.find(c => c.id === toCurrency) || CALCULATOR_CURRENCIES[0];
@@ -102,18 +109,60 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
     if (navigator.share) {
       navigator.share({
         title: `Tasa de cambio ${rateName}`,
-        text: `VeneRate - Tasa de Cambio para ${rateName}: ${value} VES/${currency}. ¡Monitorizado en tiempo real!`,
+        text: `Venrate - Tasa de Cambio para ${rateName}: ${value} VES/${currency}. ¡Monitorizado en tiempo real!`,
         url: window.location.href,
       }).catch(() => {
         onTriggerToast(`Tasa de ${rateName} copiada para compartir`, 'success');
       });
     } else {
-      navigator.clipboard.writeText(`Tasa de Cambio ${rateName}: ${value} VES/${currency} (VeneRate)`);
+      navigator.clipboard.writeText(`Tasa de Cambio ${rateName}: ${value} VES/${currency} (Venrate)`);
       onTriggerToast(`Tasa de ${rateName} copiada al portapapeles`, 'success');
     }
   };
 
-  const heroRate = rates.find(r => r.id === 'bcvUsd') || rates[0];
+  const handleShareAsImage = async () => {
+    if (!shareCardRef.current) return;
+    setIsGeneratingImage(true);
+    try {
+      const dataUrl = await toPng(shareCardRef.current, {
+        cacheBust: true,
+        pixelRatio: 2,
+        backgroundColor: '#0a0d1a',
+        style: { transform: 'scale(1)', transformOrigin: 'top left' },
+      });
+
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'venrate-conversion.png', { type: 'image/png' });
+      const shareText = `${calcAmount} ${fromObj.code} = ${convertedAmount.toFixed(2)} ${toObj.code} (Venrate)`;
+
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+        await navigator.share({
+          title: 'Conversión Venrate',
+          text: shareText,
+          files: [file],
+        });
+      } else {
+        const link = document.createElement('a');
+        link.download = 'venrate-conversion.png';
+        link.href = dataUrl;
+        link.click();
+        onTriggerToast('Imagen descargada', 'success');
+      }
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === 'AbortError')) {
+        onTriggerToast('Error al generar la imagen', 'error');
+      }
+    } finally {
+      setIsGeneratingImage(false);
+      setShowShareModal(false);
+    }
+  };
+
+  const visibleRates = widgetRateIds
+    .map(id => rates.find(r => r.id === id))
+    .filter((r): r is ExchangeRate => !!r);
+  const heroRate = visibleRates[0] || rates[0];
   const prevRateRef = useRef(heroRate.rate);
   const [heroFlash, setHeroFlash] = useState<'up' | 'down' | null>(null);
 
@@ -196,7 +245,7 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
                   PRINCIPAL
                 </span>
                 <span className="font-mono text-[10px] text-slate-500">
-                  Banco Central de Venezuela
+                  {heroRate.id === 'binanceP2p' ? 'Binance P2P · USDT' : 'Banco Central de Venezuela'}
                 </span>
               </div>
 
@@ -233,7 +282,7 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
             </div>
 
             <div className="flex flex-col gap-3 justify-center">
-              {rates.filter(r => r.id !== 'bcvUsd').map(r => {
+              {visibleRates.slice(1).map(r => {
                 const isUp = r.change >= 0;
                 return (
                   <div key={r.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:bg-white/[0.04] transition-colors cursor-pointer">
@@ -264,123 +313,6 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
         </div>
       </motion.div>
 
-      {isCompactView ? (
-        <motion.div variants={itemVariants} className="block md:hidden space-y-3">
-          <div className="glass-card rounded-2xl overflow-hidden divide-y divide-white/[0.04]">
-            {rates.map((rate) => {
-              const isUp = rate.change >= 0;
-              return (
-                <motion.div
-                  key={rate.id}
-                  onClick={() => {
-                    if (rate.id === 'binanceP2p') { setFromCurrency('USDT'); setToCurrency('VES'); }
-                    else if (rate.id === 'bcvUsd') { setFromCurrency('USD_B'); setToCurrency('VES'); }
-                    else if (rate.id === 'bcvEur') { setFromCurrency('EUR'); setToCurrency('VES'); }
-                    else { setFromCurrency('USD_B'); setToCurrency('VES'); }
-                  }}
-                  whileHover={{ backgroundColor: 'rgba(255,255,255,0.03)' }}
-                  whileTap={{ scale: 0.99 }}
-                  className="p-4 flex items-center justify-between cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-xs border ${
-                      rate.id === 'binanceP2p'
-                        ? 'bg-warning/10 text-warning border-warning/20'
-                        : isUp ? 'bg-success/10 text-success border-success/20' : 'bg-tertiary/10 text-tertiary border-tertiary/20'
-                    }`}>
-                      {rate.code}
-                    </div>
-                    <div>
-                      <h4 className="font-sans text-sm font-bold text-on-surface">{rate.name}</h4>
-                      <p className="font-sans text-[10px] text-slate-500">{rate.lastUpdated}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <AnimatedNumber value={rate.rate} className="font-mono text-sm font-extrabold text-on-surface" />
-                      <span className="font-mono text-[9px] text-slate-500 block">VES</span>
-                    </div>
-                    <span className={`font-mono text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                      rate.change === 0 ? 'bg-white/[0.03] text-slate-500' : isUp ? 'text-success bg-success/10' : 'text-tertiary bg-tertiary/10'
-                    }`}>
-                      {rate.change === 0 ? '0.00' : isUp ? '+' : ''}{rate.change.toFixed(2)}%
-                    </span>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        </motion.div>
-      ) : (
-        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {rates.filter(r => ['bcvUsd', 'bcvEur', 'binanceP2p'].includes(r.id)).map((rate, idx) => {
-            const isUp = rate.change >= 0;
-            return (
-              <motion.div
-                key={rate.id}
-                variants={itemVariants}
-                initial="rest"
-                whileHover="hover"
-                whileTap="tap"
-                onClick={() => {
-                  if (rate.id === 'binanceP2p') { setFromCurrency('USDT'); setToCurrency('VES'); }
-                  else if (rate.id === 'bcvUsd') { setFromCurrency('USD_B'); setToCurrency('VES'); }
-                  else if (rate.id === 'bcvEur') { setFromCurrency('EUR'); setToCurrency('VES'); }
-                }}
-                className={`glass-card rounded-2xl p-6 flex flex-col justify-between min-h-[200px] cursor-pointer relative overflow-hidden ${
-                  rate.id === 'binanceP2p'
-                    ? 'border-warning/15'
-                    : ''
-                }`}
-              >
-                <motion.div
-                  className={`absolute -right-6 -top-6 w-28 h-28 rounded-full blur-3xl pointer-events-none ${
-                    rate.id === 'binanceP2p' ? 'bg-warning/15' : isUp ? 'bg-success/10' : 'bg-tertiary/10'
-                  }`}
-                  animate={{ scale: [1, 1.3, 1] }}
-                  transition={{ repeat: Infinity, duration: 6, ease: 'easeInOut' }}
-                />
-
-                <div className="flex justify-between items-start relative z-10">
-                  <div className="space-y-1">
-                    <h3 className="font-display text-base font-bold text-on-surface">{rate.name}</h3>
-                    <p className="font-sans text-[11px] text-slate-500">{rate.id === 'binanceP2p' ? 'USDT P2P Promedio' : 'Oficial Venezuela'}</p>
-                  </div>
-                  <motion.span
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold border ${
-                      isUp ? 'text-success bg-success/10 border-success/20' : 'text-tertiary bg-tertiary/10 border-tertiary/20'
-                    }`}
-                  >
-                    {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                    <span className="font-mono">{isUp ? '+' : ''}{rate.change.toFixed(2)}%</span>
-                  </motion.span>
-                </div>
-
-                <div className="mt-8 flex items-baseline justify-between relative z-10">
-                  <div className="flex items-baseline gap-2">
-                    <AnimatedNumber
-                      value={rate.rate}
-                      className={`font-display text-3xl md:text-4xl font-extrabold tracking-tight ${
-                        rate.id === 'binanceP2p' ? 'text-warning/90' : 'text-on-surface'
-                      }`}
-                    />
-                    <span className="font-mono text-[11px] text-slate-500 uppercase">VES/{rate.code}</span>
-                  </div>
-                  <motion.button
-                    whileHover={{ scale: 1.1, backgroundColor: 'rgba(255,255,255,0.08)' }}
-                    whileTap={{ scale: 0.9 }}
-                    onClick={(e) => { e.stopPropagation(); handleShareRate(rate.name, rate.rate, rate.code); }}
-                    className="p-2 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                  >
-                    <Share2 className="w-4 h-4 text-slate-400" />
-                  </motion.button>
-                </div>
-              </motion.div>
-            );
-          })}
-        </motion.div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
         <motion.section variants={itemVariants} className="lg:col-span-3 glass-card rounded-3xl p-6 md:p-8 space-y-6">
           <div className="flex items-center justify-between">
@@ -402,15 +334,12 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="font-mono text-[10px] text-slate-500 tracking-wider font-semibold uppercase">De</label>
-                <select
+                <CurrencySelect
                   value={fromCurrency}
-                  onChange={(e) => setFromCurrency(e.target.value)}
-                  className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-1.5 text-xs text-slate-300 font-semibold outline-none cursor-pointer hover:border-primary/30 transition-all"
-                >
-                  {CALCULATOR_CURRENCIES.filter(c => c.id !== toCurrency).map(curr => (
-                    <option key={curr.id} value={curr.id} className="bg-[#12152a]">{curr.name}</option>
-                  ))}
-                </select>
+                  onChange={setFromCurrency}
+                  currencies={CALCULATOR_CURRENCIES}
+                  excludeId={toCurrency}
+                />
               </div>
               <div className="relative">
                 <input
@@ -443,15 +372,13 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <label className="font-mono text-[10px] text-slate-500 tracking-wider font-semibold uppercase">A</label>
-                <select
+                <CurrencySelect
                   value={toCurrency}
-                  onChange={(e) => setToCurrency(e.target.value)}
-                  className="bg-white/[0.03] border border-white/[0.06] rounded-xl px-3 py-1.5 text-xs text-slate-300 font-semibold outline-none cursor-pointer hover:border-primary/30 transition-all"
-                >
-                  {CALCULATOR_CURRENCIES.filter(c => c.id !== fromCurrency).map(curr => (
-                    <option key={curr.id} value={curr.id} className="bg-[#12152a]">{curr.name}</option>
-                  ))}
-                </select>
+                  onChange={setToCurrency}
+                  currencies={CALCULATOR_CURRENCIES}
+                  excludeId={fromCurrency}
+                  accent="secondary"
+                />
               </div>
               <div className="relative">
                 <input
@@ -485,6 +412,15 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
                       {fromObj.code === 'EUR' ? '€' : '$'}{v}
                     </motion.button>
                   ))}
+              <motion.button
+                whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
+                onClick={() => { setShareNote(''); setShowShareModal(true); }}
+                disabled={calcAmount === 0}
+                className="px-3 py-1 text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 rounded-xl border border-primary/15 transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ImageIcon className="w-3 h-3 inline mr-1" />
+                Compartir
+              </motion.button>
               <motion.button
                 whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.9 }}
                 onClick={() => { setCalcAmount(0); onTriggerToast('Campos vaciados', 'info'); }}
@@ -617,6 +553,85 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
           )}
         </motion.section>
       </div>
+
+      <AnimatePresence>
+        {showShareModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowShareModal(false)}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+              onClick={(e) => e.stopPropagation()}
+              className="glass-strong rounded-3xl p-6 max-w-md w-full space-y-5 relative overflow-hidden"
+            >
+              <button
+                onClick={() => setShowShareModal(false)}
+                aria-label="Cerrar"
+                className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-on-surface hover:bg-white/[0.06] transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div>
+                <h4 className="font-display text-lg font-bold text-on-surface">Compartir conversión</h4>
+                <p className="font-sans text-[11px] text-slate-500">Genera una imagen con el resultado y compártela</p>
+              </div>
+
+              <div className="flex justify-center">
+                <ShareableConversionCard
+                  ref={shareCardRef}
+                  fromAmount={calcAmount}
+                  fromCurrencyCode={fromObj.code}
+                  toAmount={convertedAmount}
+                  toCurrencyCode={toObj.code}
+                  rate={fromRate / toRate}
+                  note={shareNote}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="font-mono text-[10px] text-slate-500 uppercase tracking-wider font-semibold">
+                  Nota (opcional)
+                </label>
+                <textarea
+                  value={shareNote}
+                  onChange={(e) => setShareNote(e.target.value)}
+                  placeholder="Ej: Tasa del día para referencia..."
+                  rows={2}
+                  maxLength={160}
+                  className="w-full bg-white/[0.03] border border-white/[0.06] rounded-xl px-4 py-3 text-sm text-on-surface outline-none focus:border-primary/30 transition-all placeholder:text-slate-700 resize-none"
+                />
+                <p className="text-right font-mono text-[9px] text-slate-600">{shareNote.length}/160</p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowShareModal(false)}
+                  className="flex-1 px-4 py-2.5 text-xs font-semibold bg-white/[0.04] text-slate-400 hover:text-on-surface rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleShareAsImage}
+                  disabled={isGeneratingImage}
+                  className="flex-1 px-4 py-2.5 text-xs font-bold bg-primary/20 text-primary hover:bg-primary/30 rounded-xl border border-primary/20 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  {isGeneratingImage ? 'Generando...' : 'Compartir como foto'}
+                </motion.button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 });
