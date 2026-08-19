@@ -40,15 +40,13 @@ Diseñado como una **PWA instalable** con soporte offline — instálalo en tu t
 
 ## 📸 Capturas de pantalla
 
-> **Nota:** Estas son capturas placeholder. Reemplaza los archivos SVG por PNG reales en `screenshots/` para mostrar la interfaz actual.
-
 | Dashboard | Calculadora | Historial |
 |:---------:|:-----------:|:---------:|
-| <img src="screenshots/dashboard.svg" width="220" /> | <img src="screenshots/calculator.svg" width="220" /> | <img src="screenshots/history.svg" width="220" /> |
+| <img src="screenshots/dashboard.png" width="220" /> | <img src="screenshots/calculator.png" width="220" /> | <img src="screenshots/history.png" width="220" /> |
 
 | Alertas | Ajustes | |
 |:-------:|:--------:|:--------:|
-| <img src="screenshots/alerts.svg" width="220" /> | <img src="screenshots/settings.svg" width="220" /> | |
+| <img src="screenshots/alerts.png" width="220" /> | <img src="screenshots/settings.png" width="220" /> | |
 
 ## 🛠 Tech Stack
 
