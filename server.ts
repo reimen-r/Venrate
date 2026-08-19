@@ -7,6 +7,8 @@ import rateLimit from "express-rate-limit";
 
 async function startServer() {
   const app = express();
+  // Trust Railway's edge proxy so req.ip reflects the real client IP (per-user rate limit)
+  app.set('trust proxy', 1);
   app.use(compression());
 
   // Security headers
@@ -108,7 +110,10 @@ async function startServer() {
 
       // 1. Primary source: er-api official USD/EUR -> VES (reliable and up-to-date)
       try {
-        const usdPromise = fetch('https://open.er-api.com/v6/latest/USD')
+        const usdPromise = fetch('https://open.er-api.com/v6/latest/USD', {
+          signal: AbortSignal.timeout(6000),
+          redirect: 'error'
+        })
           .then(async (r) => {
             if (!r.ok) throw new Error(`Status: ${r.status}`);
             const data = await r.json();
@@ -121,7 +126,10 @@ async function startServer() {
             return null;
           });
 
-        const eurPromise = fetch('https://open.er-api.com/v6/latest/EUR')
+        const eurPromise = fetch('https://open.er-api.com/v6/latest/EUR', {
+          signal: AbortSignal.timeout(6000),
+          redirect: 'error'
+        })
           .then(async (r) => {
             if (!r.ok) throw new Error(`Status: ${r.status}`);
             const data = await r.json();
@@ -147,7 +155,8 @@ async function startServer() {
       try {
         const usdtHtml = await fetch('https://usdt.com.ve', {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-          signal: AbortSignal.timeout(6000)
+          signal: AbortSignal.timeout(6000),
+          redirect: 'error'
         }).then(r => r.text()).catch(() => null);
 
         if (usdtHtml) {
@@ -168,7 +177,8 @@ async function startServer() {
       try {
         const monitorHtml = await fetch('https://monitordedivisavenezuela.com', {
           headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-          signal: AbortSignal.timeout(6000)
+          signal: AbortSignal.timeout(6000),
+          redirect: 'error'
         }).then(r => r.text()).catch(() => null);
 
         if (monitorHtml) {
