@@ -16,6 +16,18 @@ export const CALCULATOR_CURRENCIES = [
   { id: 'USDT', name: 'USDT Binance', code: 'USDT', getRate: (ratesList: ExchangeRate[]) => ratesList.find(r => r.id === 'binanceP2p')?.rate || 817.00 },
 ];
 
+const formatEsVe = (value: number): string => {
+  if (value === 0) return '';
+  return value.toLocaleString('es-VE', { maximumFractionDigits: 4 });
+};
+
+const parseEsVe = (v: string): number => {
+  const cleaned = v.replace(/[^0-9,]/g, '').replace(/\./g, '');
+  const normalized = cleaned.replace(',', '.');
+  const parsed = parseFloat(normalized);
+  return isNaN(parsed) ? 0 : parsed;
+};
+
 interface DashboardTabProps {
   rates: ExchangeRate[];
   onTriggerToast: (message: string, type: 'success' | 'info' | 'error') => void;
@@ -73,6 +85,8 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
   const [shareNote, setShareNote] = useState<string>('');
   const [showShareModal, setShowShareModal] = useState<boolean>(false);
   const [isGeneratingImage, setIsGeneratingImage] = useState<boolean>(false);
+  const [fromDraft, setFromDraft] = useState<string>('');
+  const [fromDraftFocused, setFromDraftFocused] = useState<boolean>(false);
   const shareCardRef = useRef<HTMLDivElement>(null);
 
   const fromObj = CALCULATOR_CURRENCIES.find(c => c.id === fromCurrency) || CALCULATOR_CURRENCIES[1];
@@ -343,11 +357,18 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
               </div>
               <div className="relative">
                 <input
-                  type="number"
-                  value={calcAmount === 0 ? '' : calcAmount}
-                  onChange={(e) => { const v = parseFloat(e.target.value); setCalcAmount(isNaN(v) ? 0 : v); }}
+                  type="text"
+                  inputMode="decimal"
+                  value={fromDraftFocused ? fromDraft : formatEsVe(calcAmount)}
+                  onFocus={() => { setFromDraft(calcAmount === 0 ? '' : String(calcAmount)); setFromDraftFocused(true); }}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/[^0-9.,]/g, '');
+                    setFromDraft(raw);
+                    setCalcAmount(parseEsVe(raw));
+                  }}
+                  onBlur={() => { setFromDraftFocused(false); }}
                   className="w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl px-5 py-4 font-mono text-2xl text-on-surface outline-none focus:border-primary/30 transition-all placeholder:text-slate-700"
-                  placeholder="0.00"
+                  placeholder="0,00"
                 />
                 <div className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-xs bg-white/[0.04] px-3 py-1.5 rounded-xl border border-white/[0.05]">
                   {fromObj.code}
@@ -382,14 +403,15 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
               </div>
               <div className="relative">
                 <input
-                  type="number"
-                  value={convertedAmount === 0 ? '' : parseFloat(convertedAmount.toFixed(4))}
+                  type="text"
+                  inputMode="decimal"
+                  value={formatEsVe(convertedAmount)}
                   onChange={(e) => {
-                    const v = parseFloat(e.target.value);
+                    const v = parseEsVe(e.target.value);
                     if (fromRate !== 0) setCalcAmount(isNaN(v) ? 0 : (v * toRate) / fromRate);
                   }}
                   className="w-full bg-white/[0.02] border border-white/[0.06] rounded-2xl px-5 py-4 font-mono text-2xl text-on-surface outline-none focus:border-primary/30 transition-all placeholder:text-slate-700"
-                  placeholder="0.00"
+                  placeholder="0,00"
                 />
                 <div className="absolute right-5 top-1/2 -translate-y-1/2 text-secondary font-bold text-xs bg-secondary/10 px-3 py-1.5 rounded-xl border border-secondary/15">
                   {toObj.code}
