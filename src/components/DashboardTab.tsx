@@ -376,17 +376,17 @@ export const DashboardTab = React.memo<DashboardTabProps>(({
               </div>
             </div>
 
-            <div className="flex justify-center -my-3 relative z-10">
+            <div className="flex justify-center relative z-10 pl-4">
               <motion.button
                 onClick={handleSwapCurrencies}
                 animate={{ rotate: swapped ? 180 : 0 }}
                 transition={{ type: 'spring', stiffness: 260, damping: 18 }}
                 whileHover={{ scale: 1.1, backgroundColor: 'rgba(34,211,238,0.1)' }}
                 whileTap={{ scale: 0.9 }}
-                className="glass p-3.5 rounded-full border border-white/[0.06] cursor-pointer text-primary shadow-lg"
+                className="glass p-2 rounded-full border border-white/[0.06] cursor-pointer text-primary shadow-lg"
                 aria-label="Invertir dirección"
               >
-                <ArrowUpDown className="w-5 h-5" />
+                <ArrowUpDown className="w-4 h-4" />
               </motion.button>
             </div>
 
